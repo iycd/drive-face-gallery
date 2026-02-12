@@ -6,7 +6,7 @@ import {
   Loader2, 
   FolderOpen,
   Camera,
-  Upload, // Icon baru
+  Upload, 
   Search,
   RefreshCw,
   Play,
@@ -17,46 +17,36 @@ import {
   ChevronLeft,
   Folder as FolderIcon,
   CheckCircle2,
-  User
+  User,
+  Zap
 } from 'lucide-react';
 
 // ==========================================
-// UTILITY: LOAD FACE API SCRIPT
+// UTILITY: LOAD FACE API
 // ==========================================
 const loadFaceApiScript = () => {
   return new Promise((resolve) => {
-    if (window.faceapi) {
-      resolve();
-      return;
-    }
+    if (window.faceapi) { resolve(); return; }
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
     script.crossOrigin = 'anonymous';
     script.onload = () => resolve();
-    script.onerror = () => {
-      console.error("Gagal memuat face-api.js");
-      resolve();
-    };
+    script.onerror = () => { console.error("Gagal memuat face-api.js"); resolve(); };
     document.head.appendChild(script);
   });
 };
 
 // ==========================================
-// HELPER: LONG PRESS HOOK
+// HELPER: LONG PRESS
 // ==========================================
 const useLongPress = (callback = () => {}, ms = 500) => {
   const [startLongPress, setStartLongPress] = useState(false);
-
   useEffect(() => {
     let timerId;
-    if (startLongPress) {
-      timerId = setTimeout(callback, ms);
-    } else {
-      clearTimeout(timerId);
-    }
+    if (startLongPress) timerId = setTimeout(callback, ms);
+    else clearTimeout(timerId);
     return () => clearTimeout(timerId);
   }, [callback, ms, startLongPress]);
-
   return {
     onMouseDown: () => setStartLongPress(true),
     onMouseUp: () => setStartLongPress(false),
@@ -79,6 +69,7 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     const loadModels = async () => {
        try {
          await loadFaceApiScript();
+         // Menggunakan model Tiny agar cepat di HP
          const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
          await Promise.all([
            window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
@@ -86,9 +77,7 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
            window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
          ]);
          setModelLoaded(true);
-       } catch (e) {
-         setErrorMsg("Gagal memuat AI.");
-       }
+       } catch (e) { setErrorMsg("Gagal memuat AI."); }
     };
     if (isOpen) loadModels();
   }, [isOpen]);
@@ -105,9 +94,7 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
             videoRef.current.play().catch(e => console.error(e));
           };
         }
-      } catch (err) {
-        setErrorMsg("Izin kamera ditolak.");
-      }
+      } catch (err) { setErrorMsg("Izin kamera ditolak."); }
     };
     if (isOpen) startCamera();
     return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
@@ -119,18 +106,18 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     const canvas = document.createElement('canvas');
     canvas.width = videoEl.videoWidth;
     canvas.height = videoEl.videoHeight;
-    canvas.getContext('2d').drawImage(videoEl, 0, 0);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoEl, 0, 0);
     
     try {
+      // Gunakan TinyFaceDetector untuk capture juga
       const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
       if (detection) {
         onCapture(canvas.toDataURL('image/jpeg'), detection.descriptor);
       } else {
-        alert("Wajah tidak terdeteksi dengan jelas.");
+        alert("Wajah tidak terdeteksi. Pastikan cahaya cukup.");
       }
-    } catch (err) {
-      alert("Error proses AI.");
-    }
+    } catch (err) { alert("Error proses AI."); }
   };
 
   if (!isOpen) return null;
@@ -173,24 +160,20 @@ const DriveGalleryApp = ({ gasUrl }) => {
   });
   const currentFolder = folderHistory[folderHistory.length - 1];
 
-  // Selection State
+  // Selection
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // AI Search State
+  // AI & Scanning
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [userDescriptor, setUserDescriptor] = useState(null);
   const [capturedFaceImg, setCapturedFaceImg] = useState(null);
   const [matches, setMatches] = useState([]);
-  
-  // Scanning Process State
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
-  const [scanIndex, setScanIndex] = useState(0);
-  const [currentScanningFile, setCurrentScanningFile] = useState(null); // File yg sedang dicek
-  const stopScanRef = useRef(false);
+  const [scanCount, setScanCount] = useState(0);
   
-  // Ref untuk file upload input
+  const stopScanRef = useRef(false);
   const fileInputRef = useRef(null);
 
   // --- FETCH DATA ---
@@ -201,10 +184,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
       urlObj.searchParams.set('folderId', folderId);
       
       const res = await fetch(urlObj.toString());
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) throw new Error("Server error (HTML Response).");
-
-      const data = await res.json();
+      const data = await res.json(); // Asumsi backend sudah JSON
+      
       if (data.error) throw new Error(data.error);
 
       if (data.files) setCurrentFiles(data.files);
@@ -213,7 +194,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
 
       resetSearch();
     } catch (e) {
-      alert("Gagal memuat: " + e.message);
+      // alert("Gagal memuat: " + e.message); 
+      // Silent error agar tidak mengganggu jika koneksi putus nyambung
     } finally {
       setIsLoading(false);
     }
@@ -225,85 +207,84 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setSelectedIds([]);
   }, [currentFolder, fetchData]);
 
-  // --- AI SCANNING LOGIC ---
-  const startScanning = async (startIdx = 0) => {
-    if (!userDescriptor || startIdx >= currentFiles.length) {
-      setIsScanning(false);
-      setCurrentScanningFile(null);
-      return;
-    }
+  // --- TURBO SCANNING LOGIC (PARALLEL + PROXY) ---
+  const startScanning = async () => {
+    if (!userDescriptor || currentFiles.length === 0) return;
     
-    // Pastikan faceapi dimuat sebelum loop
     if (!window.faceapi) await loadFaceApiScript();
 
     setIsScanning(true);
     stopScanRef.current = false;
     
-    // Threshold 0.45 = Lebih ketat/akurat (Default 0.6 kadang terlalu longgar)
-    const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.45);
+    // Tweak Toleransi: 0.5 cukup ketat, 0.6 lebih longgar (lebih banyak hasil)
+    const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.55);
+    
+    // Batch size: Proses 3 foto sekaligus agar cepat
+    const BATCH_SIZE = 3; 
+    let processed = 0;
 
-    for (let i = startIdx; i < currentFiles.length; i++) {
+    for (let i = 0; i < currentFiles.length; i += BATCH_SIZE) {
       if (stopScanRef.current) break;
 
-      const file = currentFiles[i];
-      setScanIndex(i + 1);
-      setScanProgress(Math.round(((i + 1) / currentFiles.length) * 100));
-      setCurrentScanningFile(file.name); // Update status visual
-
-      try {
-        // Fetch gambar (thumbnail kecil agar cepat)
-        const img = await window.faceapi.fetchImage(file.thumbnail, { mode: 'cors' });
-        // Deteksi wajah di foto tersebut
-        const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions())
-                                        .withFaceLandmarks()
-                                        .withFaceDescriptors();
-
-        let isMatch = false;
-        for (const d of detections) {
-           const match = faceMatcher.findBestMatch(d.descriptor);
-           // Jika jarak < threshold, berarti cocok
-           if (match.label !== 'unknown') { 
-             isMatch = true; 
-             break; 
-           }
-        }
-
-        if (isMatch) {
-          setMatches(prev => [...prev, file.id]);
-        }
-      } catch (err) {
-        // Skip error (misal gambar corrupt/CORS issue)
-      }
+      const batch = currentFiles.slice(i, i + BATCH_SIZE);
       
-      // Jeda kecil agar UI tidak freeze
-      await new Promise(r => setTimeout(r, 10));
+      // Proses batch secara paralel
+      await Promise.all(batch.map(async (file) => {
+        try {
+          // SOLUSI UTAMA: Menggunakan Proxy 'corsproxy.io' untuk bypass blokir Google
+          // Tanpa ini, AI melihat kanvas kosong -> 0 Matches
+          const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(file.thumbnail);
+          
+          const img = await window.faceapi.fetchImage(proxyUrl);
+          
+          const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions())
+                                          .withFaceLandmarks()
+                                          .withFaceDescriptors();
+
+          let isMatch = false;
+          for (const d of detections) {
+             const match = faceMatcher.findBestMatch(d.descriptor);
+             if (match.label !== 'unknown') { isMatch = true; break; }
+          }
+
+          if (isMatch) {
+            setMatches(prev => [...prev, file.id]);
+          }
+        } catch (err) {
+          // console.log("Gagal scan:", file.name);
+        }
+      }));
+
+      processed += batch.length;
+      setScanCount(processed);
+      setScanProgress(Math.round((processed / currentFiles.length) * 100));
+      
+      // Istirahat sejenak agar browser tidak hang
+      await new Promise(r => setTimeout(r, 50));
     }
+    
     setIsScanning(false);
-    setCurrentScanningFile(null);
   };
 
-  // --- HANDLE SEARCH INPUT ---
+  // --- HANDLERS ---
   const handleCapture = (imgUrl, descriptor) => {
     setCapturedFaceImg(imgUrl);
     setUserDescriptor(descriptor);
     setMatches([]);
     setIsCameraOpen(false);
-    setTimeout(() => startScanning(0), 500);
+    setTimeout(startScanning, 500);
   };
 
   const handleUploadPhoto = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Tampilkan loading sementara
     const tempUrl = URL.createObjectURL(file);
     setCapturedFaceImg(tempUrl);
-    setIsScanning(true); // Status dummy agar user tahu sedang proses
+    setIsScanning(true); // Dummy status
 
     try {
       await loadFaceApiScript();
-      
-      // Load Models jika belum
       const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
       await Promise.all([
            window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
@@ -311,41 +292,35 @@ const DriveGalleryApp = ({ gasUrl }) => {
            window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
       ]);
 
-      // Deteksi wajah di foto upload
       const img = await window.faceapi.bufferToImage(file);
       const detection = await window.faceapi.detectSingleFace(img, new window.faceapi.TinyFaceDetectorOptions())
-                                     .withFaceLandmarks()
-                                     .withFaceDescriptor();
+                                     .withFaceLandmarks().withFaceDescriptor();
       
       if (detection) {
         setUserDescriptor(detection.descriptor);
         setMatches([]);
-        setTimeout(() => startScanning(0), 500);
+        setTimeout(startScanning, 500);
       } else {
-        alert("Wajah tidak ditemukan di foto yang diupload.");
-        setCapturedFaceImg(null);
-        setIsScanning(false);
+        alert("Wajah tidak ditemukan di foto upload.");
+        resetSearch();
       }
     } catch (err) {
-      console.error(err);
-      alert("Gagal memproses foto upload.");
-      setCapturedFaceImg(null);
-      setIsScanning(false);
+      alert("Gagal memproses foto.");
+      resetSearch();
     }
   };
 
   const resetSearch = () => {
     stopScanRef.current = true;
     setIsScanning(false);
-    setCurrentScanningFile(null);
     setCapturedFaceImg(null);
     setUserDescriptor(null);
     setMatches([]);
     setScanProgress(0);
-    setScanIndex(0);
+    setScanCount(0);
   };
 
-  // --- UI ACTIONS ---
+  // --- NAVIGATION ---
   const handleNavigate = (folderId, folderName) => setFolderHistory(prev => [...prev, { id: folderId, name: folderName }]);
   const handleBack = () => folderHistory.length > 1 && setFolderHistory(prev => prev.slice(0, -1));
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -357,30 +332,19 @@ const DriveGalleryApp = ({ gasUrl }) => {
     alert(`Mendownload ${selectedIds.length} item...`);
     selectedIds.forEach((id, index) => {
       const file = currentFiles.find(f => f.id === id);
-      if (file) setTimeout(() => window.open(file.downloadUrl, '_blank'), index * 800);
+      if (file) setTimeout(() => window.open(file.downloadUrl, '_blank'), index * 500);
     });
     setIsSelectionMode(false);
     setSelectedIds([]);
   };
 
-  // Filter display
   const displayedFiles = userDescriptor ? currentFiles.filter(f => matches.includes(f.id)) : currentFiles;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 font-sans select-none">
-      
       {isCameraOpen && <CameraModal isOpen={true} onClose={() => setIsCameraOpen(false)} onCapture={handleCapture} />}
-      
-      {/* Hidden File Input */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        accept="image/*" 
-        className="hidden" 
-        onChange={handleUploadPhoto}
-      />
+      <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleUploadPhoto} />
 
-      {/* NAVBAR */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
           <div className="flex items-center gap-2 overflow-hidden flex-1">
@@ -393,62 +357,42 @@ const DriveGalleryApp = ({ gasUrl }) => {
           <div className="flex gap-2 items-center">
              {!capturedFaceImg && (
                 <>
-                  {/* Upload Button */}
-                  <button onClick={() => fileInputRef.current.click()} className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200" title="Upload Foto Wajah">
-                    <Upload className="w-5 h-5" />
-                  </button>
-                  {/* Camera Button */}
-                  <button onClick={() => setIsCameraOpen(true)} className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200" title="Scan Kamera">
-                    <Camera className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => setIsSelectionMode(!isSelectionMode)} className={`p-2 rounded-full ${isSelectionMode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                    {isSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                  </button>
+                  <button onClick={() => fileInputRef.current.click()} className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200" title="Upload Foto"><Upload className="w-5 h-5" /></button>
+                  <button onClick={() => setIsCameraOpen(true)} className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200" title="Kamera"><Camera className="w-5 h-5" /></button>
+                  <button onClick={() => setIsSelectionMode(!isSelectionMode)} className={`p-2 rounded-full ${isSelectionMode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>{isSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}</button>
                 </>
              )}
              <button onClick={() => fetchData(currentFolder.id)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} /></button>
           </div>
         </div>
 
-        {/* STATUS BAR SEARCH */}
         {capturedFaceImg && (
-           <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <img src={capturedFaceImg} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
-                  {isScanning && <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-1 border border-white"><Loader2 className="w-3 h-3 text-white animate-spin"/></div>}
-                </div>
-                
-                <div className="flex-1">
-                   <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-blue-700 uppercase">
-                        {isScanning ? 'Mencari...' : `Selesai (${matches.length} Foto)`}
-                      </span>
-                      <span className="text-xs text-blue-600">{scanIndex} / {currentFiles.length}</span>
-                   </div>
-                   <div className="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
-                      <div className={`h-full transition-all duration-300 ${isScanning ? 'bg-blue-600 animate-pulse' : 'bg-green-500'}`} style={{width: `${scanProgress}%`}}></div>
-                   </div>
-                   {/* Info File yang sedang discan */}
-                   {isScanning && currentScanningFile && (
-                     <p className="text-[10px] text-blue-500 mt-1 truncate max-w-[200px]">Cek: {currentScanningFile}</p>
-                   )}
-                </div>
-
-                <div className="flex gap-1">
-                   {isScanning ? (
-                      <button onClick={() => { stopScanRef.current = true; setIsScanning(false); }} className="p-2 bg-red-100 text-red-600 rounded-full"><Pause className="w-4 h-4"/></button>
-                   ) : (
-                      scanIndex < currentFiles.length && scanIndex > 0 && 
-                      <button onClick={() => startScanning(scanIndex)} className="p-2 bg-blue-100 text-blue-600 rounded-full"><Play className="w-4 h-4"/></button>
-                   )}
-                   <button onClick={resetSearch} className="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300"><X className="w-4 h-4"/></button>
-                </div>
+           <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex items-center gap-3">
+              <div className="relative">
+                <img src={capturedFaceImg} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+                {isScanning && <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-1 border border-white"><Zap className="w-3 h-3 text-white fill-white"/></div>}
+              </div>
+              <div className="flex-1">
+                 <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-blue-700 uppercase">{isScanning ? 'Memindai...' : `Selesai (${matches.length})`}</span>
+                    <span className="text-xs text-blue-600">{scanCount} / {currentFiles.length}</span>
+                 </div>
+                 <div className="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-full transition-all duration-300 ${isScanning ? 'bg-blue-600' : 'bg-green-500'}`} style={{width: `${scanProgress}%`}}></div>
+                 </div>
+              </div>
+              <div className="flex gap-1">
+                 {isScanning ? (
+                    <button onClick={() => { stopScanRef.current = true; setIsScanning(false); }} className="p-2 bg-red-100 text-red-600 rounded-full"><Pause className="w-4 h-4"/></button>
+                 ) : (
+                    scanCount < currentFiles.length && scanCount > 0 && 
+                    <button onClick={startScanning} className="p-2 bg-blue-100 text-blue-600 rounded-full"><Play className="w-4 h-4"/></button>
+                 )}
+                 <button onClick={resetSearch} className="p-2 bg-gray-200 text-gray-600 rounded-full"><X className="w-4 h-4"/></button>
               </div>
            </div>
         )}
 
-        {/* TABS */}
         {subFolders.length > 0 && !capturedFaceImg && (
           <div className="px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-gray-50 border-b border-gray-200">
             {subFolders.map(folder => (
@@ -467,7 +411,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
         </div>
       )}
 
-      {/* GRID */}
       <main className="p-2 sm:p-4">
         {isLoading && currentFiles.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-gray-400"><Loader2 className="w-8 h-8 animate-spin mb-2" /><p>Memuat...</p></div>
