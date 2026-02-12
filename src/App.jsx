@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Download, 
-  LogOut, 
   Image as ImageIcon, 
   X, 
   Loader2, 
@@ -11,14 +10,16 @@ import {
   AlertCircle,
   CheckCircle2,
   Square,
-  CheckSquare
+  CheckSquare,
+  RefreshCw,
+  Link as IconLink
 } from 'lucide-react';
 
 // ==========================================
-// KONFIGURASI DAN SCOPE
+// ARSITEKTUR BARU: GAS JSON BRIDGE
 // ==========================================
-const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
-const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
+// Aplikasi ini tidak lagi menggunakan Google Sign-In.
+// Melainkan membaca data JSON dari Google Apps Script Web App.
 
 // --- HELPER COMPONENTS ---
 
@@ -81,8 +82,8 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   );
 };
 
-// 2. KOMPONEN UTAMA APLIKASI
-const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId }) => {
+// 2. KOMPONEN UTAMA APLIKASI (GALLERY)
+const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
   const [capturedFace, setCapturedFace] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -134,17 +135,16 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
     
     alert(`Akan mendownload ${selectedIds.length} foto. Izinkan pop-up jika browser memblokir.`);
 
-    // Loop download dengan delay agar browser tidak crash/blokir
+    // Loop download dengan delay
     selectedIds.forEach((id, index) => {
       const file = driveFiles.find(f => f.id === id);
-      if (file && file.webContentLink) {
+      if (file && file.downloadUrl) {
         setTimeout(() => {
-          window.open(file.webContentLink, '_blank');
+          window.open(file.downloadUrl, '_blank');
         }, index * 800); // Jeda 800ms per file
       }
     });
     
-    // Keluar mode seleksi setelah download dimulai
     setTimeout(() => {
       setIsSelectionMode(false);
       setSelectedIds([]);
@@ -217,12 +217,9 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex flex-col items-end">
-              <span className="text-sm font-medium text-gray-700">{user.name}</span>
-            </div>
-            <img src={user.avatar} alt="Profile" className="w-9 h-9 rounded-full border border-gray-200" />
-            <button onClick={onLogout} className="p-2 hover:bg-red-50 hover:text-red-600 rounded-full text-gray-500 transition-colors" title="Keluar">
-              <LogOut className="w-5 h-5" />
+             {/* Refresh Button instead of Logout */}
+             <button onClick={onRefresh} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors" title="Refresh Data">
+              <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -230,10 +227,10 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {isLoadingDrive ? (
+        {isLoading ? (
           <div className="flex flex-col justify-center items-center h-64">
             <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-            <p className="text-gray-500 animate-pulse">Menghubungkan ke Google Drive...</p>
+            <p className="text-gray-500 animate-pulse">Mengambil data dari Google Apps Script...</p>
           </div>
         ) : (
           <div>
@@ -253,6 +250,7 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
                   <Search className="w-8 h-8 text-gray-300" />
                 </div>
                 <p className="text-gray-500">Tidak ada foto ditemukan.</p>
+                <p className="text-xs text-gray-400 mt-2">Pastikan script GAS Anda sudah benar.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -270,7 +268,7 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
                       }}
                     >
                       <img 
-                        src={photo.thumbnailLink} 
+                        src={photo.thumbnail} 
                         alt={photo.name}
                         loading="lazy"
                         className={`w-full h-full object-cover transition-transform duration-500 ${!isSelectionMode && 'group-hover:scale-110'}`}
@@ -296,10 +294,10 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
                         <p className="text-white text-xs truncate">{photo.name}</p>
                       </div>
                       
-                      {/* Single Download Button (Only visible if NOT in selection mode) */}
+                      {/* Single Download Button */}
                       {!isSelectionMode && (
                         <button 
-                          onClick={(e) => handleDownload(e, photo.webContentLink)}
+                          onClick={(e) => handleDownload(e, photo.downloadUrl)}
                           className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white shadow-sm"
                         >
                           <Download className="w-4 h-4" />
@@ -342,14 +340,14 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
 
           <div className="max-w-5xl w-full flex flex-col items-center">
             <img 
-              src={selectedPhoto.webContentLink || selectedPhoto.thumbnailLink} 
+              src={selectedPhoto.full || selectedPhoto.thumbnail} 
               alt={selectedPhoto.name}
               className="max-h-[80vh] object-contain rounded shadow-2xl"
               referrerPolicy="no-referrer"
             />
             <div className="mt-4 flex gap-3">
                <button 
-                 onClick={(e) => handleDownload(e, selectedPhoto.webContentLink)}
+                 onClick={(e) => handleDownload(e, selectedPhoto.downloadUrl)}
                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors"
                >
                  <Download className="w-4 h-4" /> Download Asli
@@ -362,138 +360,132 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
   );
 };
 
-// --- AUTH & INIT WRAPPER ---
+// --- MAIN ENTRY POINT (SETUP & DATA FETCHING) ---
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [gapiLoaded, setGapiLoaded] = useState(false);
   const [driveFiles, setDriveFiles] = useState([]);
-  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [gasUrl, setGasUrl] = useState('');
 
-  const [config, setConfig] = useState({ clientId: '', apiKey: '', folderId: 'root' });
-
+  // 1. Cek URL Parameter saat load untuk mendapatkan GAS URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const encryptedData = params.get('data');
-    if (encryptedData) {
-      try {
-        const decoded = atob(encryptedData);
-        const parsed = JSON.parse(decoded);
-        if (parsed.c && parsed.k) {
-          setConfig({ clientId: parsed.c, apiKey: parsed.k, folderId: parsed.f || 'root' });
-          return;
-        }
-      } catch (e) {
-        console.error("Gagal membaca link terenkripsi", e);
-      }
+    // Kita cari parameter ?api=...
+    const urlFromParam = params.get('api');
+    
+    // Atau ambil dari localStorage jika pernah disimpan
+    const savedUrl = localStorage.getItem('gas_app_url');
+
+    if (urlFromParam) {
+      setGasUrl(urlFromParam);
+      // Simpan untuk kunjungan berikutnya
+      localStorage.setItem('gas_app_url', urlFromParam);
+    } else if (savedUrl) {
+      setGasUrl(savedUrl);
     }
-    const clientId = params.get('clientId');
-    const apiKey = params.get('apiKey');
-    const folderId = params.get('folderId') || 'root';
-    if (clientId && apiKey) setConfig({ clientId, apiKey, folderId });
   }, []);
 
+  // 2. Fetch Data jika URL tersedia
   useEffect(() => {
-    if (!config.clientId || !config.apiKey) return;
-    const loadGapi = () => {
-      const script = document.createElement('script');
-      script.src = "https://apis.google.com/js/api.js";
-      script.onload = () => { window.gapi.load('client:auth2', initClient); };
-      document.body.appendChild(script);
-    };
-    loadGapi();
-  }, [config]);
+    if (gasUrl) {
+      fetchData(gasUrl);
+    }
+  }, [gasUrl]);
 
-  const initClient = () => {
-    window.gapi.client.init({
-      apiKey: config.apiKey,
-      clientId: config.clientId,
-      discoveryDocs: DISCOVERY_DOCS,
-      scope: SCOPES,
-    }).then(() => {
-      setGapiLoaded(true);
-      const authInstance = window.gapi.auth2.getAuthInstance();
-      authInstance.isSignedIn.listen(updateSigninStatus);
-      updateSigninStatus(authInstance.isSignedIn.get());
-    }, (error) => {
-      setErrorMsg("Gagal inisialisasi. Cek Client ID/API Key.");
-    });
-  };
-
-  const updateSigninStatus = (isSignedIn) => {
-    if (isSignedIn) {
-      const profile = window.gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile();
-      setUser({ name: profile.getName(), email: profile.getEmail(), avatar: profile.getImageUrl() });
-      listFiles();
-    } else {
-      setUser(null);
-      setDriveFiles([]);
+  const fetchData = async (url) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Data dari GAS biasanya array. Langsung set.
+      // Pastikan format data dari GAS: { id, name, thumbnail, full, downloadUrl }
+      setDriveFiles(data);
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      setErrorMsg("Gagal mengambil data: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const listFiles = () => {
-    setIsLoadingDrive(true);
-    let query = "mimeType contains 'image/' and trashed = false";
-    if (config.folderId && config.folderId !== 'root') query += ` and '${config.folderId}' in parents`;
-
-    window.gapi.client.drive.files.list({
-      'pageSize': 100,
-      'fields': "nextPageToken, files(id, name, mimeType, thumbnailLink, webContentLink)",
-      'q': query
-    }).then((response) => {
-      const files = response.result.files;
-      if (files && files.length > 0) {
-        const enhancedFiles = files.map(f => ({
-            ...f,
-            thumbnailLink: f.thumbnailLink ? f.thumbnailLink.replace('=s220', '=s400') : null
-        }));
-        setDriveFiles(enhancedFiles);
-      } else setDriveFiles([]);
-      setIsLoadingDrive(false);
-    });
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    const inputUrl = e.target.elements.url.value;
+    if (inputUrl) {
+      setGasUrl(inputUrl);
+      localStorage.setItem('gas_app_url', inputUrl);
+    }
   };
 
-  if (!config.clientId || !config.apiKey) {
-     return (
-       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-100">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <AlertCircle className="w-8 h-8 text-yellow-600" />
-            </div>
-            <h1 className="text-xl font-bold text-gray-800 mb-2">Setup Diperlukan</h1>
-            <p className="text-gray-600 mb-6 text-sm">Gunakan <i>Generator Link</i> untuk membuat link akses.</p>
-            <a href="/generator.html" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors">Buka Generator Link</a>
-         </div>
-       </div>
-     )
-  }
-
-  if (!user) {
+  // TAMPILAN: JIKA BELUM ADA URL SCRIPT
+  if (!gasUrl) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-gray-100">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FolderOpen className="w-8 h-8 text-blue-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Drive Gallery</h1>
-          <p className="text-gray-500 mb-8">Login untuk mengakses foto Anda.</p>
-          <button 
-            onClick={() => window.gapi.auth2.getAuthInstance().signIn()}
-            className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-3 shadow-sm transition-all"
-          >
-            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
-            Masuk dengan Google
-          </button>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-100">
+           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+               <IconLink className="w-8 h-8 text-blue-600" />
+           </div>
+           <h1 className="text-xl font-bold text-gray-800 mb-2">Setup Koneksi</h1>
+           <p className="text-gray-600 mb-6 text-sm">
+              Masukkan URL Web App dari <b>Google Apps Script</b> Anda.
+           </p>
+           
+           <form onSubmit={handleManualSubmit} className="space-y-4">
+             <input 
+               name="url"
+               type="url" 
+               placeholder="https://script.google.com/macros/s/..." 
+               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+               required
+             />
+             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors">
+               Mulai Galeri
+             </button>
+           </form>
+           
+           <p className="text-xs text-gray-400 mt-4">
+             Atau gunakan link: <code>domain-anda.com/?api=URL_SCRIPT</code>
+           </p>
         </div>
       </div>
     );
   }
 
-  return <DriveGalleryApp 
-    user={user} 
-    onLogout={() => window.gapi.auth2.getAuthInstance().signOut()} 
-    driveFiles={driveFiles}
-    isLoadingDrive={isLoadingDrive}
-    folderId={config.folderId}
-  />;
+  // TAMPILAN: JIKA ERROR
+  if (errorMsg) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-4 text-center">
+        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-bold text-red-700">Terjadi Kesalahan</h3>
+        <p className="text-red-600 mb-6">{errorMsg}</p>
+        <button 
+          onClick={() => fetchData(gasUrl)} 
+          className="px-6 py-2 bg-white border border-red-200 text-red-600 rounded-full hover:bg-red-50"
+        >
+          Coba Lagi
+        </button>
+        <button 
+          onClick={() => { setGasUrl(''); localStorage.removeItem('gas_app_url'); }}
+          className="mt-4 text-sm text-gray-500 underline"
+        >
+          Ganti URL Script
+        </button>
+      </div>
+    );
+  }
+
+  // TAMPILAN: UTAMA
+  return (
+    <DriveGalleryApp 
+      driveFiles={driveFiles} 
+      isLoading={loading} 
+      onRefresh={() => fetchData(gasUrl)}
+    />
+  );
 }
