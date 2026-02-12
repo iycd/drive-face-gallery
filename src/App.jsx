@@ -16,7 +16,9 @@ import {
   Terminal,
   User,
   AlertTriangle,
-  SearchX
+  Search,
+  Maximize2,
+  ExternalLink
 } from "lucide-react";
 
 /* ==========================================
@@ -27,6 +29,7 @@ const loadFaceApiScript = () =>
   new Promise(resolve => {
     if (window.faceapi) return resolve();
     const s = document.createElement("script");
+    s.id = "face-api-js";
     s.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
     s.crossOrigin = "anonymous";
     s.onload = resolve;
@@ -48,7 +51,7 @@ async function loadModelsOnce() {
 
       const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
 
-      console.log("Memuat model AI ke memori...");
+      console.log("Memuat model AI...");
       await Promise.all([
         window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
         window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -72,31 +75,40 @@ async function loadModelsOnce() {
    2. IMAGE HELPERS & PREPROCESSING
 ========================================== */
 
-// Helper untuk URL Gambar yang kompatibel dengan AI
+// Helper untuk URL Gambar yang kompatibel dengan AI menggunakan Proxy High Fidelity
 function getAIFriendlyUrl(file) {
   const rawUrl = file.full || `https://drive.google.com/uc?id=${file.id}`;
-  // Gunakan Proxy wsrv.nl untuk bypass CORS dan resize agar stabil
-  return `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=512&output=jpg&q=80`;
+  // Gunakan Proxy wsrv.nl dengan output JPG 80% dan width 600px untuk keseimbangan akurasi/kecepatan
+  return `https://wsrv.nl/?url=${encodeURIComponent(rawUrl)}&w=600&output=jpg&q=80&error=404`;
 }
+
+// Menunggu gambar benar-benar termuat ke dalam memori browser
+const waitImageLoad = (src) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(new Error("Gagal mengunduh gambar melalui proxy"));
+  });
+};
 
 async function preprocessImage(imgSource) {
   const canvas = document.createElement('canvas');
-  let width = imgSource.width || imgSource.videoWidth;
-  let height = imgSource.height || imgSource.videoHeight;
+  let width = imgSource.width;
+  let height = imgSource.height;
 
-  // Resize ke minimal 512px agar wajah kecil tetap terdeteksi
-  const MIN_SIZE = 512;
-  if (width < MIN_SIZE || height < MIN_SIZE) {
-    const scale = Math.max(MIN_SIZE / width, MIN_SIZE / height);
-    width = Math.round(width * scale);
-    height = Math.round(height * scale);
-  }
+  // Normalisasi ukuran untuk AI
+  const TARGET_SIZE = 512;
+  const scale = Math.max(TARGET_SIZE / width, TARGET_SIZE / height);
+  width = Math.round(width * scale);
+  height = Math.round(height * scale);
 
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // Tingkatkan kontras dan kecerahan untuk membantu deteksi
+  // Tingkatkan detail fitur wajah
   ctx.filter = 'contrast(1.2) brightness(1.1)';
   ctx.drawImage(imgSource, 0, 0, width, height);
   
@@ -111,12 +123,14 @@ export default function App() {
   const [gasUrl, setGasUrl] = useState("");
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
-  const [history, setHistory] = useState([]); // Mulai dengan array kosong untuk keamanan
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [folderError, setFolderError] = useState(false); // Status error folder
+  const [folderError, setFolderError] = useState(false);
 
+  // UI State
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selected, setSelected] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [previewPhoto, setPreviewPhoto] = useState(null); // Fitur Preview Gambar
 
   // AI State
   const [faceDescriptor, setFaceDescriptor] = useState(null);
@@ -140,42 +154,39 @@ export default function App() {
   };
 
   /* ==========================================
-     FETCH DRIVE DATA (SECURITY FIX)
+     FETCH DRIVE DATA
   ========================================== */
 
   const fetchData = useCallback(async (id) => {
     if (!gasUrl || !id) return;
 
     setLoading(true);
-    setFolderError(false); // Reset error sebelum fetch
+    setFolderError(false);
     try {
       const u = new URL(gasUrl);
       u.searchParams.set("folderId", id);
       const r = await fetch(u.toString());
       
-      // Jika response bukan JSON (misal error HTML dari GAS)
       const contentType = r.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Response tidak valid");
+        throw new Error("Format Link Apps Script salah atau tidak mengembalikan JSON");
       }
 
       const d = await r.json();
-      
       if (d.error) throw new Error(d.error);
       
       setFiles(d.files || []);
       setFolders(d.folders || []);
       log(`Berhasil memuat ${d.files?.length || 0} file.`);
     } catch (e) {
-      log(`Error: Folder tidak ditemukan atau akses ditolak.`, "error");
-      setFolderError(true); // Aktifkan UI Folder Tidak Ditemukan
+      log(`Error: Folder tidak valid atau akses ditolak.`, "error");
+      setFolderError(true);
       setFiles([]);
       setFolders([]);
     }
     setLoading(false);
   }, [gasUrl]);
 
-  // Efek Navigasi Folder
   useEffect(() => {
     if (gasUrl && currentFolder) {
       fetchData(currentFolder.id);
@@ -183,7 +194,7 @@ export default function App() {
   }, [currentFolder, fetchData, gasUrl]);
 
   /* ==========================================
-     CORE AI ENGINE (STABILITY FIX)
+     CORE AI ENGINE (STABILITY MODE)
   ========================================== */
 
   const startScanning = async () => {
@@ -198,18 +209,17 @@ export default function App() {
       setLogs([]);
       startTimeRef.current = Date.now();
 
-      log("Menyiapkan mesin AI...");
+      log("Menyiapkan AI...");
       await loadModelsOnce();
-      log("AI Siap. Memulai pemindaian paralel...");
+      log("Memulai pemindaian mendalam...");
 
-      // Threshold lebih longgar (0.6) agar lebih akurat mencari kecocokan
       const matcher = new window.faceapi.FaceMatcher(faceDescriptor, 0.6);
-      const BATCH_SIZE = 5; 
+      const BATCH_SIZE = 4; // Mengurangi batch agar lebih stabil di mobile
       let processed = 0;
 
       for (let i = 0; i < files.length; i += BATCH_SIZE) {
         if (stopRef.current) {
-          log("Pemindaian dihentikan.");
+          log("Pemindaian dibatalkan pengguna.");
           break;
         }
 
@@ -217,14 +227,15 @@ export default function App() {
         
         await Promise.all(batch.map(async (file) => {
           try {
-            // Gunakan Proxy untuk semua pengambilan gambar AI
             const aiUrl = getAIFriendlyUrl(file);
-            const img = await window.faceapi.fetchImage(aiUrl);
+            
+            // Step 1: Tunggu gambar termuat sempurna
+            const rawImg = await waitImageLoad(aiUrl);
 
-            // Preprocess sebelum deteksi
-            const canvas = await preprocessImage(img);
+            // Step 2: Tingkatkan kualitas gambar via Canvas
+            const canvas = await preprocessImage(rawImg);
 
-            // Deteksi Wajah (TinyFaceDetector 416, 0.4)
+            // Step 3: Deteksi wajah
             const detections = await window.faceapi
               .detectAllFaces(canvas, new window.faceapi.TinyFaceDetectorOptions({
                 inputSize: 416,
@@ -234,24 +245,25 @@ export default function App() {
               .withFaceDescriptors();
 
             if (detections.length === 0) {
-              log(`${file.name}: Tidak ada wajah terdeteksi.`);
+              log(`${file.name}: 0 Wajah.`);
             }
 
-            let isMatch = false;
+            let foundMatch = false;
             for (const d of detections) {
-              if (matcher.findBestMatch(d.descriptor).label !== "unknown") {
-                isMatch = true;
+              const match = matcher.findBestMatch(d.descriptor);
+              if (match.label !== "unknown") {
+                foundMatch = true;
                 break;
               }
             }
 
-            if (isMatch) {
-              setMatches(prev => [...prev, file.id]);
+            if (foundMatch) {
+              setMatches(prev => [...new Set([...prev, file.id])]);
               log(`COCOK: ${file.name}`, "success");
             }
 
           } catch (e) {
-            log(`Gagal memproses ${file.name}: ${e.message}`, "error");
+            log(`Lewati ${file.name}: Masalah unduhan gambar.`, "warning");
           }
         }));
 
@@ -266,16 +278,16 @@ export default function App() {
         const etaSec = Math.round(remaining / rate);
         setEta(etaSec > 60 ? `${Math.floor(etaSec/60)}m` : `${etaSec}s`);
 
-        await new Promise(r => setTimeout(r, 100));
+        // Jeda kecil agar UI tetap responsif
+        await new Promise(r => setTimeout(r, 150));
       }
 
       setScanning(false);
-      log(`Selesai. Menemukan ${matches.length} foto.`);
+      log(`Pemindaian selesai. Menemukan ${matches.length} kecocokan.`);
 
     } catch (err) {
-      log(`Kesalahan AI: ${err.message}`, "error");
+      log(`AI Error: ${err.message}`, "error");
       setScanning(false);
-      alert("AI Error: " + err.message);
     }
   };
 
@@ -285,7 +297,7 @@ export default function App() {
 
     setLoading(true);
     try {
-      log("Menganalisis foto referensi...");
+      log("Menganalisis wajah referensi...");
       await loadModelsOnce();
 
       const img = await window.faceapi.bufferToImage(file);
@@ -296,7 +308,7 @@ export default function App() {
         .withFaceDescriptor();
 
       if (!detection) {
-        alert("Wajah tidak ditemukan di foto referensi. Gunakan foto selfie yang jelas.");
+        alert("Wajah tidak terdeteksi. Gunakan foto selfie yang lebih jelas.");
         setLoading(false);
         return;
       }
@@ -305,18 +317,17 @@ export default function App() {
       setMatches([]);
       setLoading(false);
       
-      // Auto-start scanning
+      // Auto-start
       setTimeout(startScanning, 500);
 
     } catch (err) {
       log(`Gagal memuat foto: ${err.message}`, "error");
-      alert("Gagal memproses foto.");
       setLoading(false);
     }
   };
 
   /* ==========================================
-     BOOTSTRAP & INITIALIZATION
+     UI & NAVIGATION LOGIC
   ========================================== */
 
   useEffect(() => {
@@ -332,7 +343,6 @@ export default function App() {
       setGasUrl(finalUrl);
       localStorage.setItem("gas_app_url", finalUrl);
       
-      // Deteksi Folder ID Awal
       try {
         const urlObj = new URL(finalUrl);
         const folderId = urlObj.searchParams.get("folderId") || "root";
@@ -341,17 +351,23 @@ export default function App() {
         setFolderError(true);
       }
     }
-    
-    loadModelsOnce().catch(console.warn);
   }, []);
 
   const navigate = (id, name) => setHistory(h => [...h, { id, name }]);
   const back = () => history.length > 1 && setHistory(h => h.slice(0, -1));
-  const toggleSelect = id => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  const toggleSelect = id => setSelectedIds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   
   const displayed = faceDescriptor ? files.filter(f => matches.includes(f.id)) : files;
 
-  if (!gasUrl) return <div className="p-10 text-center font-sans">Gunakan Generator Link untuk masuk.</div>;
+  if (!gasUrl) return (
+    <div className="min-h-screen flex items-center justify-center bg-white p-6">
+       <div className="text-center max-w-sm">
+          <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Akses Terbatas</h2>
+          <p className="text-gray-500 text-sm">Gunakan Generator Link untuk menghubungkan folder Google Drive Anda ke aplikasi ini.</p>
+       </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-48 font-sans select-none">
@@ -360,130 +376,162 @@ export default function App() {
       {/* HEADER */}
       <div className="sticky top-0 bg-white shadow-sm z-40 p-3 flex justify-between items-center border-b">
         <div className="flex items-center gap-2 overflow-hidden max-w-[60%]">
-          {history.length > 1 && <button onClick={back} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft /></button>}
-          <b className="truncate text-gray-700">{currentFolder?.name || "Memuat..."}</b>
+          {history.length > 1 && <button onClick={back} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ChevronLeft /></button>}
+          <b className="truncate text-gray-800 tracking-tight">{currentFolder?.name || "Memuat..."}</b>
         </div>
 
         <div className="flex gap-2">
           {faceDescriptor ? (
              <button onClick={() => { setFaceDescriptor(null); setMatches([]); setScanning(false); stopRef.current = true; }} 
-                     className="bg-red-50 text-red-600 px-4 py-2 rounded-full text-xs font-bold border border-red-100 flex items-center gap-2">
+                     className="bg-red-50 text-red-600 px-4 py-2 rounded-full text-xs font-bold border border-red-100 flex items-center gap-2 animate-pulse">
                 <X size={14}/> Batal Cari
              </button>
           ) : (
              <>
-               <button onClick={() => fileInputRef.current.click()} className="bg-blue-600 text-white px-4 py-2 rounded-full flex items-center gap-2 text-xs font-bold shadow-md hover:bg-blue-700">
-                 <Camera size={16} /> <span className="hidden sm:inline">Cari Wajah</span>
+               <button onClick={() => fileInputRef.current.click()} className="bg-blue-600 text-white px-4 py-2 rounded-full flex items-center gap-2 text-xs font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition-all">
+                 <Camera size={16} /> <span className="hidden sm:inline">Scan Wajah</span>
                </button>
-               <button onClick={() => setSelectionMode(s => !s)} className={`p-2 rounded-full border ${selectionMode ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white text-gray-500'}`}>
+               <button onClick={() => setSelectionMode(s => !s)} className={`p-2 rounded-full border transition-all ${selectionMode ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-500 hover:border-gray-300'}`}>
                  {selectionMode ? <CheckSquare size={18} /> : <Square size={18} />}
                </button>
              </>
           )}
-          <button onClick={() => fetchData(currentFolder.id)} className="p-2 bg-white border rounded-full text-gray-500 shadow-sm">
-            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+          <button onClick={() => fetchData(currentFolder.id)} className="p-2 bg-white border rounded-full text-gray-500 shadow-sm hover:bg-gray-50">
+            <RefreshCw size={18} className={loading ? "animate-spin text-blue-600" : ""} />
           </button>
         </div>
       </div>
 
-      {/* ERROR DISPLAY (SAFETY FEATURE) */}
       {folderError ? (
-        <div className="max-w-md mx-auto mt-20 p-8 text-center bg-white rounded-3xl shadow-xl border border-red-50">
-           <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle size={32} />
-           </div>
+        <div className="max-w-md mx-auto mt-20 p-8 text-center bg-white rounded-3xl shadow-xl border border-red-50 mx-4">
+           <AlertTriangle size={48} className="text-red-500 mx-auto mb-4" />
            <h2 className="text-xl font-bold text-gray-800 mb-2">Folder Tidak Ditemukan</h2>
-           <p className="text-gray-500 text-sm mb-6">Link folder Anda salah, kadaluarsa, atau tidak memiliki izin akses publik.</p>
-           <button onClick={() => window.location.reload()} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">Coba Lagi</button>
+           <p className="text-gray-500 text-sm mb-6">Link tidak valid atau Anda tidak memiliki izin akses ke folder ini.</p>
+           <button onClick={() => window.location.reload()} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">Coba Lagi</button>
         </div>
       ) : (
         <>
           {/* SUBFOLDERS */}
           {folders.length > 0 && (
-            <div className="flex gap-2 p-3 overflow-x-auto bg-gray-50 border-b border-gray-100 scrollbar-hide">
+            <div className="flex gap-2 p-3 overflow-x-auto bg-gray-100 border-b border-gray-200 scrollbar-hide">
               {folders.map(f => (
-                <button key={f.id} onClick={() => navigate(f.id, f.name)} className="bg-white border border-gray-200 px-4 py-1.5 rounded-full flex items-center gap-2 text-xs font-medium whitespace-nowrap shadow-sm hover:border-blue-300">
+                <button key={f.id} onClick={() => navigate(f.id, f.name)} className="bg-white border border-gray-200 px-4 py-2 rounded-full flex items-center gap-2 text-xs font-semibold whitespace-nowrap shadow-sm hover:border-blue-400 transition-colors">
                   <Folder size={14} className="text-yellow-500 fill-yellow-500" /> {f.name}
                 </button>
               ))}
             </div>
           )}
 
-          {/* PHOTO GRID */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1 p-1 sm:gap-4 sm:p-4">
+          {/* GRID */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 p-1.5 sm:gap-4 sm:p-4">
             {displayed.map(f => (
               <div 
                 key={f.id} 
-                onClick={() => selectionMode ? toggleSelect(f.id) : window.open(f.downloadUrl || f.thumbnail, "_blank")}
-                className={`aspect-square rounded-xl overflow-hidden relative cursor-pointer bg-gray-200 transition-all ${selected.includes(f.id) ? "ring-4 ring-blue-500 p-1" : ""} ${matches.includes(f.id) ? "ring-4 ring-green-500" : ""}`}
+                onClick={() => selectionMode ? toggleSelect(f.id) : setPreviewPhoto(f)}
+                className={`aspect-square rounded-2xl overflow-hidden relative cursor-pointer bg-gray-200 transition-all transform active:scale-95 ${selectedIds.includes(f.id) ? "ring-4 ring-blue-600 p-1 bg-blue-100" : ""} ${matches.includes(f.id) ? "ring-4 ring-green-500" : ""}`}
               >
                 <img src={f.thumbnail} className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
                 
                 {selectionMode && (
-                   <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${selected.includes(f.id) ? 'bg-blue-500 border-blue-500 shadow-lg' : 'bg-black/20 border-white'}`}>
-                      {selected.includes(f.id) && <CheckCircle2 size={16} className="text-white"/>}
+                   <div className={`absolute top-2 left-2 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${selectedIds.includes(f.id) ? 'bg-blue-600 border-blue-600 shadow-md scale-110' : 'bg-black/20 border-white/50 backdrop-blur-sm'}`}>
+                      {selectedIds.includes(f.id) && <CheckCircle2 size={18} className="text-white"/>}
                    </div>
                 )}
                 
                 {matches.includes(f.id) && (
-                  <div className="absolute bottom-0 inset-x-0 bg-green-500/90 text-white text-[9px] font-black text-center py-1 tracking-tighter">COCOK</div>
+                  <div className="absolute bottom-0 inset-x-0 bg-green-500/90 text-white text-[10px] font-black text-center py-1.5 shadow-lg">COCOK</div>
                 )}
               </div>
             ))}
           </div>
 
           {displayed.length === 0 && !loading && (
-            <div className="py-20 text-center text-gray-400">
-              <User size={48} className="mx-auto mb-4 opacity-20" />
-              <p className="text-sm">{faceDescriptor ? "Tidak ditemukan foto yang cocok." : "Folder ini kosong."}</p>
+            <div className="py-32 text-center text-gray-400">
+              <User size={64} className="mx-auto mb-4 opacity-10" />
+              <p className="text-sm font-medium">{faceDescriptor ? "Tidak ada kecocokan ditemukan." : "Folder ini belum ada isinya."}</p>
             </div>
           )}
         </>
       )}
 
-      {/* LOADING OVERLAY */}
+      {/* LIGHTBOX PREVIEW (DIPULIHKAN) */}
+      {previewPhoto && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col animate-in fade-in duration-200">
+          <div className="flex justify-between items-center p-4 text-white bg-gradient-to-b from-black/80 to-transparent">
+            <button onClick={() => setPreviewPhoto(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24}/></button>
+            <div className="flex gap-3">
+              <button onClick={() => window.open(previewPhoto.full || previewPhoto.thumbnail, "_blank")} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Buka Asli"><ExternalLink size={20}/></button>
+              <a href={previewPhoto.downloadUrl || '#'} download className="bg-white text-black px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 hover:bg-gray-200">
+                <Download size={16}/> Download
+              </a>
+            </div>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-2 sm:p-10 overflow-hidden">
+             <img src={previewPhoto.full || previewPhoto.thumbnail} className="max-w-full max-h-full object-contain shadow-2xl rounded" alt={previewPhoto.name} />
+          </div>
+          <div className="p-6 text-center text-white/80 bg-gradient-to-t from-black/80 to-transparent">
+             <p className="text-sm font-bold">{previewPhoto.name}</p>
+          </div>
+        </div>
+      )}
+
+      {/* OVERLAYS & PROGRESS */}
       {loading && (
-         <div className="fixed inset-0 flex flex-col items-center justify-center bg-white/90 z-50 backdrop-blur-sm">
-            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4"/>
-            <span className="text-sm font-bold text-gray-600 animate-pulse text-center">Menghubungkan ke Drive...<br/><span className="text-[10px] font-normal">Sabar ya, lagi baca folder.</span></span>
+         <div className="fixed inset-0 flex flex-col items-center justify-center bg-white/95 z-50 backdrop-blur-md">
+            <div className="relative">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin"/>
+              <div className="absolute inset-0 flex items-center justify-center"><Search size={16} className="text-blue-400" /></div>
+            </div>
+            <span className="mt-6 text-base font-bold text-gray-700">Membuka Folder Drive...</span>
+            <span className="text-[11px] text-gray-400 mt-1 uppercase tracking-widest">Sabar, sedang mengindeks data</span>
          </div>
       )}
 
-      {/* SCANNING DRAWER */}
       {scanning && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-5 shadow-2xl z-50 animate-in slide-in-from-bottom-5 rounded-t-3xl">
-          <div className="flex justify-between items-center mb-3">
-            <div className="flex flex-col">
-               <span className="text-xs font-black text-gray-800 flex items-center gap-2">
-                  <Loader2 size={12} className="animate-spin text-blue-600"/> MEMINDAI WAJAH...
-               </span>
-               <span className="text-[10px] text-gray-500">{scanCount} / {files.length} Foto Diproses</span>
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-6 shadow-[0_-20px_40px_rgba(0,0,0,0.1)] z-50 animate-in slide-in-from-bottom-10 rounded-t-[40px]">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col">
+                 <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Status AI</span>
+                 <span className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    {scanCount} / {files.length} <span className="text-gray-400 font-normal text-sm">Foto</span>
+                 </span>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-black text-blue-600">{Math.round(progress)}%</span>
+                {eta && <div className="text-[10px] text-gray-400 font-bold uppercase">Estimasi: {eta}</div>}
+              </div>
             </div>
-            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{Math.round(progress)}% {eta ? `• ~${eta}` : ''}</span>
+            <div className="h-4 bg-gray-100 rounded-full overflow-hidden mb-6 border border-gray-100 shadow-inner">
+              <div className="h-full bg-blue-600 transition-all duration-500 ease-out relative" style={{ width: `${progress}%` }}>
+                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+              </div>
+            </div>
+            <button onClick={() => (stopRef.current = true)} className="w-full py-4 bg-red-50 text-red-600 rounded-2xl text-sm font-black hover:bg-red-100 border-2 border-red-100 transition-all shadow-sm active:scale-95">
+               HENTIKAN PEMINDAIAN
+            </button>
           </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-4 border border-gray-50">
-            <div className="h-full bg-blue-600 transition-all duration-300 shadow-[0_0_10px_rgba(37,99,235,0.5)]" style={{ width: `${progress}%` }} />
-          </div>
-          <button onClick={() => (stopRef.current = true)} className="w-full py-3 bg-red-50 text-red-600 rounded-2xl text-sm font-black hover:bg-red-100 border border-red-100">
-             BERHENTI SCAN
-          </button>
         </div>
       )}
 
       {/* LOG TERMINAL */}
       <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
-         <button onClick={() => setShowLogs(!showLogs)} className="bg-gray-900 text-white p-3.5 rounded-full shadow-2xl border-2 border-white/20 hover:scale-110 active:scale-95 transition-all">
-            <Terminal size={20} />
+         <button onClick={() => setShowLogs(!showLogs)} className={`p-4 rounded-full shadow-2xl border-2 transition-all hover:scale-110 active:scale-90 ${showLogs ? 'bg-black text-green-400 border-green-500/30' : 'bg-gray-900 text-white border-white/10'}`}>
+            <Terminal size={22} />
          </button>
       </div>
 
       {showLogs && logs.length > 0 && (
-        <div className="fixed bottom-24 left-4 right-24 bg-black/95 backdrop-blur-md text-green-400 text-[10px] font-mono p-4 rounded-2xl h-36 overflow-y-auto shadow-2xl z-30 border border-white/10 ring-1 ring-white/5">
-           <div className="flex justify-between items-center mb-2 border-b border-green-900/50 pb-1">
-              <span className="text-[9px] font-bold opacity-50 uppercase tracking-widest">AI Scanning Monitor</span>
-              <button onClick={() => setLogs([])} className="text-[8px] hover:text-white px-2 py-0.5 bg-green-900/30 rounded">Clear</button>
+        <div className="fixed bottom-24 left-4 right-24 bg-black/95 backdrop-blur-xl text-green-400 text-[10px] font-mono p-4 rounded-3xl h-44 overflow-y-auto shadow-2xl z-30 border border-white/10 ring-1 ring-white/5 animate-in zoom-in-95">
+           <div className="flex justify-between items-center mb-2 border-b border-green-900/50 pb-2">
+              <span className="text-[9px] font-bold opacity-70 uppercase tracking-[0.2em] flex items-center gap-2"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"/> AI Activity Monitor</span>
+              <button onClick={() => setLogs([])} className="text-[9px] hover:text-white px-2 py-1 bg-green-900/30 rounded-lg font-bold border border-green-500/20">RESET</button>
            </div>
-           {logs.map((l, i) => <div key={i} className={`whitespace-nowrap py-0.5 ${l.includes('COCOK') ? 'text-white bg-green-800/40 font-bold' : ''}`}>{l}</div>)}
+           {logs.map((l, i) => (
+             <div key={i} className={`whitespace-nowrap py-1 border-b border-white/5 last:border-0 ${l.includes('COCOK') ? 'text-white bg-green-600/30 px-2 rounded font-black' : ''}`}>
+               {l}
+             </div>
+           ))}
         </div>
       )}
     </div>
