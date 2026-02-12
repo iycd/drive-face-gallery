@@ -11,8 +11,18 @@ import {
   Link as IconLink,
   CheckCircle2,
   Folder as FolderIcon,
-  ChevronLeft
+  ChevronLeft,
+  Play,
+  Pause,
+  StopCircle,
+  Square,
+  CheckSquare
 } from 'lucide-react';
+
+// ==========================================
+// PENTING: Pastikan index.html memuat script face-api.js
+// <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+// ==========================================
 
 // --- CUSTOM HOOK: LONG PRESS ---
 const useLongPress = (callback = () => {}, ms = 500) => {
@@ -40,12 +50,94 @@ const useLongPress = (callback = () => {}, ms = 500) => {
   };
 };
 
-// --- HELPER COMPONENTS ---
-
+// --- HELPER COMPONENT: CAMERA MODAL (DIPULIHKAN) ---
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
-  // ... (Kode kamera sama seperti sebelumnya, disederhanakan untuk hemat tempat)
-  // ... Pastikan logika kamera tetap ada di sini ...
-  return null; // Placeholder, gunakan kode kamera sebelumnya jika butuh fitur ini
+  const videoRef = useRef(null);
+  const [modelLoaded, setModelLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadModels = async () => {
+       try {
+         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+         setModelLoaded(true);
+       } catch (e) {
+         console.error("Gagal load model AI", e);
+       }
+    };
+    loadModels();
+  }, []);
+
+  useEffect(() => {
+    let stream = null;
+    if (isOpen) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+        .then(s => {
+          stream = s;
+          if (videoRef.current) videoRef.current.srcObject = stream;
+        });
+    }
+    return () => {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
+  }, [isOpen]);
+
+  const handleCapture = async () => {
+    if (videoRef.current && modelLoaded) {
+      const videoEl = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0);
+      
+      try {
+        const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+                                       .withFaceLandmarks()
+                                       .withFaceDescriptor();
+
+        if (detection) {
+          const dataUrl = canvas.toDataURL('image/jpeg');
+          onCapture(dataUrl, detection.descriptor);
+        } else {
+          alert("Wajah tidak terdeteksi. Pastikan pencahayaan cukup.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error deteksi wajah. Pastikan library face-api dimuat.");
+      }
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl overflow-hidden max-w-lg w-full flex flex-col shadow-2xl">
+        <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
+          <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform -scale-x-100" />
+          {!modelLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white gap-2">
+               <Loader2 className="animate-spin"/> Menyiapkan AI...
+            </div>
+          )}
+          <div className="absolute inset-0 m-12 border-2 border-dashed border-white/50 rounded-full pointer-events-none"></div>
+          <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"><X className="w-5 h-5"/></button>
+        </div>
+        <div className="p-4 flex justify-center bg-white border-t">
+          <button 
+            onClick={handleCapture}
+            disabled={!modelLoaded}
+            className={`w-16 h-16 border-4 rounded-full flex items-center justify-center transition-all shadow-lg ${modelLoaded ? 'bg-white border-blue-600 hover:bg-blue-50 active:scale-95' : 'bg-gray-200 border-gray-300 cursor-not-allowed'}`}
+          >
+            <div className={`w-12 h-12 rounded-full ${modelLoaded ? 'bg-blue-600' : 'bg-gray-400'}`}></div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // --- MAIN GALLERY COMPONENT ---
@@ -54,49 +146,125 @@ const DriveGalleryApp = ({ gasUrl }) => {
   const [subFolders, setSubFolders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Navigasi Folder (History Stack)
+  // Folder Navigation State
   const [folderHistory, setFolderHistory] = useState([{ id: 'root', name: 'Home' }]);
   const currentFolder = folderHistory[folderHistory.length - 1];
 
-  // Selection Mode
+  // Selection Mode State
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Fetch Data
+  // Face Search State (DIPULIHKAN)
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [userDescriptor, setUserDescriptor] = useState(null);
+  const [capturedFaceImg, setCapturedFaceImg] = useState(null);
+  const [matches, setMatches] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanIndex, setScanIndex] = useState(0);
+  
+  const stopScanRef = useRef(false);
+
+  // --- LOGIC FETCH DATA (PERBAIKAN URL) ---
   const fetchData = useCallback(async (folderId) => {
     setIsLoading(true);
     try {
-      // Tambahkan folderId ke URL
-      const separator = gasUrl.includes('?') ? '&' : '?';
-      const fetchUrl = `${gasUrl}${separator}folderId=${folderId}`;
+      // PERBAIKAN: Gunakan URL Object agar parameter folderId tertimpa dengan benar
+      // Jika gasUrl sudah mengandung ?folderId=root, kita harus menggantinya, bukan menambah di belakang
+      const urlObj = new URL(gasUrl);
+      urlObj.searchParams.set('folderId', folderId);
       
-      const res = await fetch(fetchUrl);
+      const res = await fetch(urlObj.toString());
       const data = await res.json();
       
       if (data.error) throw new Error(data.error);
 
-      // Backend baru mengembalikan { files: [], folders: [] }
       if (data.files) setCurrentFiles(data.files);
       if (data.folders) setSubFolders(data.folders);
-      else setSubFolders([]); // Reset jika tidak ada folder
+      else setSubFolders([]);
+
+      // Reset Search saat pindah folder
+      resetSearch();
 
     } catch (e) {
       console.error(e);
-      alert("Gagal memuat data.");
+      alert("Gagal memuat data. Pastikan URL Script benar.");
     } finally {
       setIsLoading(false);
     }
   }, [gasUrl]);
 
-  // Load awal / saat folder berubah
   useEffect(() => {
     fetchData(currentFolder.id);
-    // Reset seleksi saat pindah folder
     setIsSelectionMode(false);
     setSelectedIds([]);
   }, [currentFolder, fetchData]);
 
-  // --- ACTIONS ---
+  // --- LOGIC FACE SCANNING ---
+  const startScanning = async (startIdx = 0) => {
+    if (!userDescriptor || startIdx >= currentFiles.length) {
+      setIsScanning(false);
+      return;
+    }
+
+    setIsScanning(true);
+    stopScanRef.current = false;
+    const faceMatcher = new faceapi.FaceMatcher(userDescriptor, 0.5);
+
+    for (let i = startIdx; i < currentFiles.length; i++) {
+      if (stopScanRef.current) break;
+
+      setScanIndex(i);
+      setScanProgress(Math.round(((i + 1) / currentFiles.length) * 100));
+      const file = currentFiles[i];
+      
+      try {
+        const img = await faceapi.fetchImage(file.thumbnail, { mode: 'cors' });
+        const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+                                        .withFaceLandmarks()
+                                        .withFaceDescriptors();
+
+        let isMatch = false;
+        for (const d of detections) {
+           const match = faceMatcher.findBestMatch(d.descriptor);
+           if (match.label !== 'unknown') {
+             isMatch = true;
+             break;
+           }
+        }
+        if (isMatch) setMatches(prev => [...prev, file.id]);
+      } catch (err) {
+        // Ignore error
+      }
+      await new Promise(r => setTimeout(r, 10));
+    }
+    setIsScanning(false);
+  };
+
+  const handleCapture = (imgUrl, descriptor) => {
+    setCapturedFaceImg(imgUrl);
+    setUserDescriptor(descriptor);
+    setMatches([]);
+    setIsCameraOpen(false);
+    setTimeout(() => startScanning(0), 500);
+  };
+
+  const handleStopScan = () => {
+    stopScanRef.current = true;
+    setIsScanning(false);
+  };
+
+  const resetSearch = () => {
+    stopScanRef.current = true;
+    setIsScanning(false);
+    setCapturedFaceImg(null);
+    setUserDescriptor(null);
+    setMatches([]);
+    setScanProgress(0);
+    setScanIndex(0);
+  };
+
+  // --- LOGIC UI & INTERAKSI ---
 
   const handleNavigate = (folderId, folderName) => {
     setFolderHistory(prev => [...prev, { id: folderId, name: folderName }]);
@@ -112,7 +280,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
     if (!isSelectionMode) {
       setIsSelectionMode(true);
       setSelectedIds([id]);
-      // Getar sedikit jika di HP (Haptic Feedback)
       if (navigator.vibrate) navigator.vibrate(50); 
     }
   };
@@ -131,7 +298,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     if (isSelectionMode) {
       toggleSelect(file.id);
     } else {
-      window.open(file.full, '_blank'); // Preview Full
+      window.open(file.full, '_blank');
     }
   };
 
@@ -148,41 +315,102 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setSelectedIds([]);
   };
 
+  // Filter tampilan berdasarkan hasil search (jika ada)
+  const displayedFiles = userDescriptor 
+    ? currentFiles.filter(f => matches.includes(f.id))
+    : currentFiles;
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24 font-sans select-none">
       
-      {/* NAVBAR & TABS */}
+      {isCameraOpen && (
+        <CameraModal 
+          isOpen={isCameraOpen} 
+          onClose={() => setIsCameraOpen(false)} 
+          onCapture={handleCapture} 
+        />
+      )}
+
+      {/* NAVBAR */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
-        {/* Header Utama */}
         <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
-          <div className="flex items-center gap-3 overflow-hidden">
+          <div className="flex items-center gap-2 overflow-hidden flex-1">
             {folderHistory.length > 1 && (
               <button onClick={handleBack} className="p-1 rounded-full hover:bg-gray-100">
                 <ChevronLeft className="w-6 h-6 text-gray-600" />
               </button>
             )}
-            <h1 className="text-lg font-bold text-gray-800 truncate">
+            <h1 className="text-lg font-bold text-gray-800 truncate mr-2">
               {currentFolder.name}
             </h1>
           </div>
           
-          <div className="flex gap-2">
+          {/* Action Buttons di Navbar */}
+          <div className="flex gap-2 items-center">
+             {!capturedFaceImg && (
+                <>
+                  <button 
+                    onClick={() => setIsCameraOpen(true)}
+                    className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200"
+                    title="Cari Wajah"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={() => setIsSelectionMode(!isSelectionMode)}
+                    className={`p-2 rounded-full ${isSelectionMode ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                    title="Mode Pilih"
+                  >
+                    {isSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  </button>
+                </>
+             )}
              <button onClick={() => fetchData(currentFolder.id)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
                <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
              </button>
           </div>
         </div>
 
-        {/* Folder Tabs (Scrollable) */}
-        {subFolders.length > 0 && (
+        {/* STATUS BAR PENCARIAN (Muncul saat ada hasil scan) */}
+        {capturedFaceImg && (
+           <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 flex items-center gap-3">
+              <img src={capturedFaceImg} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
+              <div className="flex-1">
+                 <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-blue-700 uppercase">
+                      {isScanning ? 'Memindai...' : `Selesai (${matches.length} hasil)`}
+                    </span>
+                    <span className="text-xs text-blue-600">{scanIndex} / {currentFiles.length}</span>
+                 </div>
+                 <div className="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${isScanning ? 'bg-blue-600 animate-pulse' : 'bg-green-500'}`} 
+                      style={{width: `${scanProgress}%`}}
+                    ></div>
+                 </div>
+              </div>
+              <div className="flex gap-1">
+                 {isScanning ? (
+                    <button onClick={handleStopScan} className="p-1.5 bg-red-100 text-red-600 rounded-full"><Pause className="w-4 h-4"/></button>
+                 ) : (
+                    scanIndex < currentFiles.length && scanIndex > 0 && 
+                    <button onClick={() => startScanning(scanIndex)} className="p-1.5 bg-blue-100 text-blue-600 rounded-full"><Play className="w-4 h-4"/></button>
+                 )}
+                 <button onClick={resetSearch} className="p-1.5 bg-gray-200 text-gray-600 rounded-full"><X className="w-4 h-4"/></button>
+              </div>
+           </div>
+        )}
+
+        {/* TAB SUB-FOLDER */}
+        {subFolders.length > 0 && !capturedFaceImg && (
           <div className="px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-gray-50 border-b border-gray-200">
             {subFolders.map(folder => (
               <button
                 key={folder.id}
                 onClick={() => handleNavigate(folder.id, folder.name)}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-600 hover:text-blue-600 hover:border-blue-300 shadow-sm whitespace-nowrap transition-all"
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm font-medium text-gray-600 hover:text-blue-600 hover:border-blue-300 shadow-sm whitespace-nowrap transition-all"
               >
-                <FolderIcon className="w-4 h-4 fill-yellow-400 text-yellow-500" />
+                <FolderIcon className="w-3.5 h-3.5 fill-yellow-400 text-yellow-500" />
                 {folder.name}
               </button>
             ))}
@@ -190,11 +418,11 @@ const DriveGalleryApp = ({ gasUrl }) => {
         )}
       </div>
 
-      {/* SELECTION BAR (Muncul saat mode seleksi) */}
-      {isSelectionMode && (
-        <div className="sticky top-[110px] z-30 bg-blue-50 px-4 py-2 flex justify-between items-center text-sm text-blue-700 font-medium animate-in slide-in-from-top-2">
-          <span>{selectedIds.length} terpilih</span>
-          <button onClick={() => setIsSelectionMode(false)} className="text-blue-600 underline">Batal</button>
+      {/* SELECTION BAR INFO */}
+      {isSelectionMode && !capturedFaceImg && (
+        <div className="sticky top-[110px] z-30 bg-blue-600 text-white px-4 py-2 flex justify-between items-center text-sm font-medium shadow-md animate-in slide-in-from-top-2">
+          <span>{selectedIds.length} foto dipilih</span>
+          <button onClick={() => setIsSelectionMode(false)} className="text-blue-100 hover:text-white underline">Batal</button>
         </div>
       )}
 
@@ -207,7 +435,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1 sm:gap-3">
-            {currentFiles.map((file) => (
+            {displayedFiles.map((file) => (
               <GridItem 
                 key={file.id} 
                 file={file} 
@@ -215,19 +443,20 @@ const DriveGalleryApp = ({ gasUrl }) => {
                 isSelected={selectedIds.includes(file.id)}
                 onLongPress={() => handleLongPress(file.id)}
                 onClick={() => handleItemClick(file)}
+                isMatch={userDescriptor && matches.includes(file.id)}
               />
             ))}
           </div>
         )}
         
-        {!isLoading && currentFiles.length === 0 && (
+        {!isLoading && displayedFiles.length === 0 && (
           <div className="text-center py-20 text-gray-400">
-            Folder ini kosong (tidak ada gambar).
+            {userDescriptor ? "Wajah tidak ditemukan di folder ini." : "Folder ini kosong."}
           </div>
         )}
       </main>
 
-      {/* FLOATING DOWNLOAD BUTTON (Hanya Logo) */}
+      {/* FLOATING DOWNLOAD BUTTON */}
       {isSelectionMode && selectedIds.length > 0 && (
         <button
           onClick={handleBatchDownload}
@@ -244,17 +473,16 @@ const DriveGalleryApp = ({ gasUrl }) => {
   );
 };
 
-// --- SUB COMPONENT: GRID ITEM (Untuk menangani Long Press) ---
-const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick }) => {
-  // Bind hook long press
-  const longPressProps = useLongPress(onLongPress, 500); // 500ms tahan
+// --- GRID ITEM ---
+const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick, isMatch }) => {
+  const longPressProps = useLongPress(onLongPress, 500);
 
   return (
     <div 
       className={`relative aspect-square bg-gray-200 overflow-hidden cursor-pointer transition-all duration-200 ${
-        isSelected ? 'p-2' : '' // Efek mengecil saat dipilih (seperti Google Photos)
+        isSelected ? 'p-2' : '' 
       }`}
-      {...longPressProps} // Pasang listener mouse/touch
+      {...longPressProps}
       onClick={onClick}
     >
       <div className={`w-full h-full relative rounded-lg overflow-hidden ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
@@ -263,10 +491,11 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick }) =
           alt={file.name}
           className="w-full h-full object-cover"
           loading="lazy"
+          crossOrigin="anonymous" // PENTING UNTUK FACE API
           referrerPolicy="no-referrer"
         />
         
-        {/* Overlay saat mode seleksi */}
+        {/* Overlay Selection */}
         {isSelectionMode && (
           <div className={`absolute inset-0 transition-colors ${isSelected ? 'bg-black/20' : 'bg-transparent'}`}>
             <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -276,6 +505,13 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick }) =
             </div>
           </div>
         )}
+
+        {/* Indikator Match AI */}
+        {isMatch && (
+           <div className="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold animate-pulse">
+              MATCH
+           </div>
+        )}
       </div>
     </div>
   );
@@ -283,7 +519,6 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick }) =
 
 // --- APP ENTRY ---
 export default function App() {
-  // ... (Bagian ini sama: membaca URL parameter untuk setup awal)
   const [gasUrl, setGasUrl] = useState('');
 
   useEffect(() => {
