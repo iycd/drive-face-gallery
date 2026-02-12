@@ -16,14 +16,11 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// ARSITEKTUR BARU: GAS JSON BRIDGE
+// ARSITEKTUR BARU: GAS JSON BRIDGE (SECURE)
 // ==========================================
-// Aplikasi ini tidak lagi menggunakan Google Sign-In.
-// Melainkan membaca data JSON dari Google Apps Script Web App.
 
 // --- HELPER COMPONENTS ---
 
-// 1. MODAL KAMERA (UI Scan Wajah)
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -82,14 +79,12 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   );
 };
 
-// 2. KOMPONEN UTAMA APLIKASI (GALLERY)
 const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
   const [capturedFace, setCapturedFace] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSearchingFace, setIsSearchingFace] = useState(false);
   
-  // STATE BARU UNTUK BATCH DOWNLOAD
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -97,7 +92,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
     setIsCameraOpen(false);
     setCapturedFace(imageUrl);
     setIsSearchingFace(true);
-    // Matikan mode seleksi saat scan wajah
     setIsSelectionMode(false);
     setSelectedIds([]);
 
@@ -115,10 +109,9 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
     if (url) window.open(url, '_blank');
   };
 
-  // --- LOGIC BATCH DOWNLOAD ---
   const toggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
-    setSelectedIds([]); // Reset saat mode berubah
+    setSelectedIds([]); 
   };
 
   const toggleSelectPhoto = (e, photoId) => {
@@ -135,13 +128,12 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
     
     alert(`Akan mendownload ${selectedIds.length} foto. Izinkan pop-up jika browser memblokir.`);
 
-    // Loop download dengan delay
     selectedIds.forEach((id, index) => {
       const file = driveFiles.find(f => f.id === id);
       if (file && file.downloadUrl) {
         setTimeout(() => {
           window.open(file.downloadUrl, '_blank');
-        }, index * 800); // Jeda 800ms per file
+        }, index * 800); 
       }
     });
     
@@ -191,7 +183,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
               </div>
             ) : (
               <>
-                 {/* Tombol Kamera */}
                 <button
                   onClick={() => setIsCameraOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-white hover:shadow-md text-gray-600 rounded-full transition-all border border-transparent hover:border-gray-200"
@@ -200,7 +191,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
                   <span className="text-sm font-medium hidden sm:inline">Scan Wajah</span>
                 </button>
 
-                {/* Tombol Toggle Select */}
                 <button
                   onClick={toggleSelectionMode}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all border ${
@@ -217,7 +207,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
           </div>
 
           <div className="flex items-center gap-3">
-             {/* Refresh Button instead of Logout */}
              <button onClick={onRefresh} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors" title="Refresh Data">
               <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -230,7 +219,7 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
         {isLoading ? (
           <div className="flex flex-col justify-center items-center h-64">
             <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-            <p className="text-gray-500 animate-pulse">Mengambil data dari Google Apps Script...</p>
+            <p className="text-gray-500 animate-pulse">Mengambil data dari Google Drive...</p>
           </div>
         ) : (
           <div>
@@ -250,7 +239,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
                   <Search className="w-8 h-8 text-gray-300" />
                 </div>
                 <p className="text-gray-500">Tidak ada foto ditemukan.</p>
-                <p className="text-xs text-gray-400 mt-2">Pastikan script GAS Anda sudah benar.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -275,10 +263,8 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
                         referrerPolicy="no-referrer"
                       />
                       
-                      {/* Overlay Gelap */}
                       <div className={`absolute inset-0 bg-black/0 transition-all ${isSelectionMode ? 'hover:bg-black/10' : 'group-hover:bg-black/20'}`} />
                       
-                      {/* CHECKBOX SELECTION MODE */}
                       {isSelectionMode && (
                         <div className="absolute top-2 left-2 z-20">
                           <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
@@ -289,12 +275,10 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
                         </div>
                       )}
 
-                      {/* Info Text */}
                       <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all">
                         <p className="text-white text-xs truncate">{photo.name}</p>
                       </div>
                       
-                      {/* Single Download Button */}
                       {!isSelectionMode && (
                         <button 
                           onClick={(e) => handleDownload(e, photo.downloadUrl)}
@@ -312,7 +296,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
         )}
       </main>
 
-      {/* FLOATING ACTION BAR UNTUK DOWNLOAD MASAL */}
       {isSelectionMode && selectedIds.length > 0 && (
         <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 animate-in slide-in-from-bottom-4">
           <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4">
@@ -328,7 +311,6 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
         </div>
       )}
 
-      {/* Lightbox Modal */}
       {selectedPhoto && (
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 backdrop-blur-md">
           <button 
@@ -367,19 +349,30 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [gasUrl, setGasUrl] = useState('');
 
-  // 1. Cek URL Parameter saat load untuk mendapatkan GAS URL
+  // 1. Cek URL Parameter saat load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // Kita cari parameter ?api=...
     const urlFromParam = params.get('api');
     
-    // Atau ambil dari localStorage jika pernah disimpan
     const savedUrl = localStorage.getItem('gas_app_url');
 
     if (urlFromParam) {
-      setGasUrl(urlFromParam);
-      // Simpan untuk kunjungan berikutnya
-      localStorage.setItem('gas_app_url', urlFromParam);
+      // LOGIKA DEKRIPSI (Simple Base64 Detection)
+      let finalUrl = urlFromParam;
+      
+      // Jika string terlihat seperti Base64 (tidak dimulai dengan http), coba decode
+      if (!urlFromParam.startsWith('http')) {
+        try {
+          finalUrl = atob(urlFromParam);
+        } catch (e) {
+          console.error("Gagal decode URL, mungkin bukan Base64 atau rusak");
+          // Fallback ke raw string jika decode gagal
+          finalUrl = urlFromParam;
+        }
+      }
+
+      setGasUrl(finalUrl);
+      localStorage.setItem('gas_app_url', finalUrl);
     } else if (savedUrl) {
       setGasUrl(savedUrl);
     }
@@ -402,9 +395,6 @@ export default function App() {
       if (data.error) {
         throw new Error(data.error);
       }
-      
-      // Data dari GAS biasanya array. Langsung set.
-      // Pastikan format data dari GAS: { id, name, thumbnail, full, downloadUrl }
       setDriveFiles(data);
     } catch (err) {
       console.error("Fetch Error:", err);
@@ -423,7 +413,6 @@ export default function App() {
     }
   };
 
-  // TAMPILAN: JIKA BELUM ADA URL SCRIPT
   if (!gasUrl) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
@@ -433,14 +422,14 @@ export default function App() {
            </div>
            <h1 className="text-xl font-bold text-gray-800 mb-2">Setup Koneksi</h1>
            <p className="text-gray-600 mb-6 text-sm">
-              Masukkan URL Web App dari <b>Google Apps Script</b> Anda.
+              Gunakan <b>Generator Link</b> untuk membuat link yang aman (terenkripsi).
            </p>
            
            <form onSubmit={handleManualSubmit} className="space-y-4">
              <input 
                name="url"
-               type="url" 
-               placeholder="https://script.google.com/macros/s/..." 
+               type="text" 
+               placeholder="Paste Link Terenkripsi atau URL Script" 
                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                required
              />
@@ -450,14 +439,13 @@ export default function App() {
            </form>
            
            <p className="text-xs text-gray-400 mt-4">
-             Atau gunakan link: <code>domain-anda.com/?api=URL_SCRIPT</code>
+             <a href="/generator.html" className="underline hover:text-blue-600">Buka Generator Link</a>
            </p>
         </div>
       </div>
     );
   }
 
-  // TAMPILAN: JIKA ERROR
   if (errorMsg) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-4 text-center">
@@ -480,7 +468,6 @@ export default function App() {
     );
   }
 
-  // TAMPILAN: UTAMA
   return (
     <DriveGalleryApp 
       driveFiles={driveFiles} 
