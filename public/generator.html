@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drive Gallery Link Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+
+    <div class="max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div class="bg-blue-600 px-8 py-6">
+                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                    <i class="fa-solid fa-cogs"></i> Generator Link Galeri
+                </h1>
+                <p class="text-blue-100 mt-2 text-sm">Buat link khusus untuk mengakses folder Google Drive tertentu tanpa coding ulang.</p>
+            </div>
+
+            <div class="p-8 space-y-6">
+                
+                <!-- Input Base URL -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Alamat Aplikasi (Vercel/Localhost)</label>
+                    <input type="text" id="baseUrl" value="http://localhost:5173" placeholder="https://app-anda.vercel.app" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none">
+                    <p class="text-xs text-gray-400 mt-1">Ganti dengan link Vercel Anda jika sudah online.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Client ID -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">OAuth Client ID</label>
+                        <input type="text" id="clientId" placeholder="123456...apps.googleusercontent.com" 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <!-- API Key -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                        <input type="text" id="apiKey" placeholder="AIzaSy..." 
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <!-- Folder ID -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Folder ID (Opsional)</label>
+                    <input type="text" id="folderId" placeholder="root" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <p class="text-xs text-gray-500 mt-1">Kosongkan atau isi 'root' untuk folder utama. Atau isi ID folder spesifik dari URL Drive.</p>
+                </div>
+
+                <hr class="border-gray-200">
+
+                <!-- Result Section -->
+                <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Link Galeri Anda:</label>
+                    
+                    <div class="flex gap-2">
+                        <input type="text" id="resultLink" readonly 
+                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-blue-600 font-medium text-sm focus:outline-none select-all">
+                        
+                        <button onclick="copyLink()" class="bg-gray-800 hover:bg-black text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-regular fa-copy"></i> Copy
+                        </button>
+                    </div>
+
+                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md">
+                        Buka Galeri Sekarang <i class="fa-solid fa-arrow-up-right-from-square ml-2"></i>
+                    </a>
+                </div>
+
+            </div>
+        </div>
+        
+        <p class="text-center text-gray-400 text-xs mt-8">
+            Data kredensial hanya ditempel di URL browser Anda dan tidak disimpan di server manapun.
+        </p>
+    </div>
+
+    <script>
+        const inputs = ['baseUrl', 'clientId', 'apiKey', 'folderId'];
+        
+        function generateLink() {
+            const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, ""); // Hapus slash di akhir
+            const clientId = document.getElementById('clientId').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const folderId = document.getElementById('folderId').value.trim() || 'root';
+
+            if(!baseUrl) return;
+
+            // Membangun URL dengan Query Parameters
+            const url = new URL(baseUrl);
+            if(clientId) url.searchParams.set('clientId', clientId);
+            if(apiKey) url.searchParams.set('apiKey', apiKey);
+            if(folderId) url.searchParams.set('folderId', folderId);
+
+            const finalLink = url.toString();
+
+            document.getElementById('resultLink').value = finalLink;
+            document.getElementById('previewBtn').href = finalLink;
+        }
+
+        function copyLink() {
+            const copyText = document.getElementById("resultLink");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999); 
+            navigator.clipboard.writeText(copyText.value);
+            
+            const btn = document.querySelector('button[onclick="copyLink()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+            btn.classList.replace('bg-gray-800', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.replace('bg-green-600', 'bg-gray-800');
+            }, 2000);
+        }
+
+        // Listen to changes
+        inputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', generateLink);
+        });
+
+        // Init
+        generateLink();
+    </script>
+</body>
+</html>
