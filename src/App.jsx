@@ -139,6 +139,7 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     ctx.drawImage(videoEl, 0, 0);
     
     try {
+      // Gunakan resolusi lebih tinggi untuk capture akhir
       const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions({ inputSize: 512 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
@@ -294,6 +295,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     addLog("Memulai pemindaian wajah...", 'info');
     stopScanRef.current = false;
     
+    // Tweak Toleransi: 0.5 cukup ketat, 0.6 lebih longgar (lebih banyak hasil)
     const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.55);
     const BATCH_SIZE = 3; 
     let processed = 0;
@@ -308,8 +310,10 @@ const DriveGalleryApp = ({ gasUrl }) => {
       
       await Promise.all(batch.map(async (file) => {
         try {
-          // addLog(`Memindai: ${file.name}`, 'debug'); // Optional: Terlalu berisik kalau semua dilog
-          const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(file.thumbnail);
+          // SOLUSI UTAMA: Menggunakan Proxy 'wsrv.nl'
+          // Ini jauh lebih stabil daripada corsproxy.io dan tidak diblokir browser
+          const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(file.thumbnail)}`;
+          
           const img = await window.faceapi.fetchImage(proxyUrl);
           const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
 
@@ -324,7 +328,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
             addLog(`MATCH DITEMUKAN: ${file.name}`, 'success');
           }
         } catch (err) {
-          addLog(`Error memindai ${file.name}: ${err.message || 'CORS/Network'}`, 'error');
+          addLog(`Gagal memindai ${file.name}: ${err.message || 'Error AI'}`, 'error');
         }
       }));
 
