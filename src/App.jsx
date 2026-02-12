@@ -7,16 +7,16 @@ import {
   FolderOpen,
   Camera,
   Search,
-  AlertCircle,
-  CheckCircle2,
-  Square,
-  CheckSquare,
   RefreshCw,
-  Link as IconLink
+  Play,
+  Pause,
+  StopCircle
 } from 'lucide-react';
 
 // ==========================================
-// ARSITEKTUR BARU: GAS JSON BRIDGE (SECURE)
+// PENTING: LIBRARY WAJAH
+// Pastikan index.html Anda memuat script face-api.js
+// <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 // ==========================================
 
 // --- HELPER COMPONENTS ---
@@ -24,6 +24,23 @@ import {
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const [modelLoaded, setModelLoaded] = useState(false);
+
+  useEffect(() => {
+    // Load model saat kamera dibuka
+    const loadModels = async () => {
+       try {
+         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+         setModelLoaded(true);
+       } catch (e) {
+         console.error("Gagal load model AI", e);
+       }
+    };
+    loadModels();
+  }, []);
 
   useEffect(() => {
     let stream = null;
@@ -32,10 +49,6 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
         .then(s => {
           stream = s;
           if (videoRef.current) videoRef.current.srcObject = stream;
-        })
-        .catch(err => {
-          alert("Gagal akses kamera: " + err.message);
-          onClose();
         });
     }
     return () => {
@@ -43,14 +56,28 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     };
   }, [isOpen]);
 
-  const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-      context.drawImage(videoRef.current, 0, 0);
-      const dataUrl = canvasRef.current.toDataURL('image/jpeg');
-      onCapture(dataUrl);
+  const handleCapture = async () => {
+    if (videoRef.current && modelLoaded) {
+      // 1. Ambil gambar dari video
+      const videoEl = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0);
+      
+      // 2. Deteksi wajah user (Descriptor)
+      // Menggunakan TinyFaceDetector agar cepat
+      const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+                                     .withFaceLandmarks()
+                                     .withFaceDescriptor();
+
+      if (detection) {
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        onCapture(dataUrl, detection.descriptor);
+      } else {
+        alert("Wajah tidak terdeteksi dengan jelas. Coba lagi.");
+      }
     }
   };
 
@@ -61,17 +88,21 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
       <div className="bg-white rounded-xl overflow-hidden max-w-lg w-full flex flex-col shadow-2xl">
         <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
           <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform -scale-x-100" />
-          <canvas ref={canvasRef} className="hidden" />
+          {!modelLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white gap-2">
+               <Loader2 className="animate-spin"/> Menyiapkan AI...
+            </div>
+          )}
           <div className="absolute inset-0 m-12 border-2 border-dashed border-white/50 rounded-full pointer-events-none"></div>
-          <div className="absolute bottom-4 text-white/80 text-xs text-center w-full">Posisikan wajah di tengah</div>
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"><X className="w-5 h-5"/></button>
         </div>
         <div className="p-4 flex justify-center bg-white border-t">
           <button 
             onClick={handleCapture}
-            className="w-16 h-16 bg-white border-4 border-blue-600 rounded-full flex items-center justify-center hover:bg-blue-50 transition-all active:scale-95 shadow-lg"
+            disabled={!modelLoaded}
+            className={`w-16 h-16 border-4 rounded-full flex items-center justify-center transition-all shadow-lg ${modelLoaded ? 'bg-white border-blue-600 hover:bg-blue-50 active:scale-95' : 'bg-gray-200 border-gray-300 cursor-not-allowed'}`}
           >
-            <div className="w-12 h-12 bg-blue-600 rounded-full"></div>
+            <div className={`w-12 h-12 rounded-full ${modelLoaded ? 'bg-blue-600' : 'bg-gray-400'}`}></div>
           </button>
         </div>
       </div>
@@ -79,72 +110,113 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   );
 };
 
+// --- MAIN GALLERY ---
 const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
-  const [capturedFace, setCapturedFace] = useState(null);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isSearchingFace, setIsSearchingFace] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
   
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState([]);
+  // AI STATE
+  const [userDescriptor, setUserDescriptor] = useState(null);
+  const [capturedFaceImg, setCapturedFaceImg] = useState(null);
+  const [matches, setMatches] = useState([]);
+  
+  // SCANNING STATE
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanIndex, setScanIndex] = useState(0);
+  
+  // Referensi agar bisa stop loop
+  const stopScanRef = useRef(false);
 
-  const handleFaceCapture = (imageUrl) => {
-    setIsCameraOpen(false);
-    setCapturedFace(imageUrl);
-    setIsSearchingFace(true);
-    setIsSelectionMode(false);
-    setSelectedIds([]);
-
-    setTimeout(() => {
-      setIsSearchingFace(false);
-    }, 2000);
-  };
-
-  const clearFaceSearch = () => {
-    setCapturedFace(null);
-  };
-
-  const handleDownload = (e, url) => {
-    if(e) e.stopPropagation();
-    if (url) window.open(url, '_blank');
-  };
-
-  const toggleSelectionMode = () => {
-    setIsSelectionMode(!isSelectionMode);
-    setSelectedIds([]); 
-  };
-
-  const toggleSelectPhoto = (e, photoId) => {
-    e.stopPropagation();
-    if (selectedIds.includes(photoId)) {
-      setSelectedIds(prev => prev.filter(id => id !== photoId));
-    } else {
-      setSelectedIds(prev => [...prev, photoId]);
+  // --- LOGIC PEMINDAIAN PROGRESIF (THE MAGIC) ---
+  const startScanning = async (startIdx = 0) => {
+    if (!userDescriptor || startIdx >= driveFiles.length) {
+      setIsScanning(false);
+      return;
     }
-  };
 
-  const handleBatchDownload = () => {
-    if (selectedIds.length === 0) return;
-    
-    alert(`Akan mendownload ${selectedIds.length} foto. Izinkan pop-up jika browser memblokir.`);
+    setIsScanning(true);
+    stopScanRef.current = false;
 
-    selectedIds.forEach((id, index) => {
-      const file = driveFiles.find(f => f.id === id);
-      if (file && file.downloadUrl) {
-        setTimeout(() => {
-          window.open(file.downloadUrl, '_blank');
-        }, index * 800); 
+    // Kita gunakan FaceMatcher dengan toleransi 0.5 (makin kecil makin ketat)
+    const faceMatcher = new faceapi.FaceMatcher(userDescriptor, 0.5);
+
+    // Loop satu per satu (atau batch kecil)
+    for (let i = startIdx; i < driveFiles.length; i++) {
+      if (stopScanRef.current) break;
+
+      setScanIndex(i);
+      setScanProgress(Math.round(((i + 1) / driveFiles.length) * 100));
+
+      const file = driveFiles[i];
+      
+      try {
+        // 1. Load gambar thumbnail (kecil saja agar cepat)
+        // Kita butuh CORS 'anonymous' agar canvas tidak tainted
+        const img = await faceapi.fetchImage(file.thumbnail, { mode: 'cors' });
+        
+        // 2. Deteksi wajah di foto tersebut
+        const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+                                        .withFaceLandmarks()
+                                        .withFaceDescriptors();
+
+        // 3. Bandingkan dengan wajah user
+        let isMatch = false;
+        for (const d of detections) {
+           const match = faceMatcher.findBestMatch(d.descriptor);
+           if (match.label !== 'unknown') {
+             isMatch = true;
+             break;
+           }
+        }
+
+        if (isMatch) {
+          setMatches(prev => [...prev, file.id]);
+        }
+
+      } catch (err) {
+        console.warn(`Gagal scan foto ${file.name}`, err);
+        // Lanjut ke foto berikutnya meski error
       }
-    });
-    
-    setTimeout(() => {
-      setIsSelectionMode(false);
-      setSelectedIds([]);
-    }, 1000);
+      
+      // Jeda sangat singkat agar UI tidak freeze (penting!)
+      await new Promise(r => setTimeout(r, 10));
+    }
+
+    setIsScanning(false);
   };
 
-  const displayedFiles = capturedFace && !isSearchingFace 
-    ? driveFiles.filter((_, i) => i % 2 === 0)
+  const handleStopScan = () => {
+    stopScanRef.current = true;
+    setIsScanning(false);
+  };
+
+  const handleCapture = (imgUrl, descriptor) => {
+    setCapturedFaceImg(imgUrl);
+    setUserDescriptor(descriptor);
+    setMatches([]); // Reset hasil sebelumnya
+    setIsCameraOpen(false);
+    
+    // Mulai scan otomatis dari awal
+    setTimeout(() => {
+      startScanning(0);
+    }, 500);
+  };
+
+  const resetSearch = () => {
+    handleStopScan();
+    setCapturedFaceImg(null);
+    setUserDescriptor(null);
+    setMatches([]);
+    setScanProgress(0);
+    setScanIndex(0);
+  };
+
+  // Tentukan foto mana yang ditampilkan
+  // Jika ada descriptor (sedang/sudah search), tampilkan matches.
+  // Jika tidak, tampilkan semua.
+  const displayedFiles = userDescriptor 
+    ? driveFiles.filter(f => matches.includes(f.id))
     : driveFiles;
 
   return (
@@ -153,165 +225,125 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
         <CameraModal 
           isOpen={isCameraOpen} 
           onClose={() => setIsCameraOpen(false)} 
-          onCapture={handleFaceCapture}
+          onCapture={handleCapture}
         />
       )}
 
-      {/* Navbar */}
-      <nav className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+      {/* Navbar & Control Panel */}
+      <nav className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-4 py-3 max-w-7xl mx-auto flex items-center justify-between">
+           <div className="flex items-center gap-2">
             <div className="bg-blue-600 p-1.5 rounded-lg">
               <FolderOpen className="text-white w-5 h-5" />
             </div>
             <span className="text-lg font-bold text-gray-700 hidden sm:inline">Drive Gallery</span>
           </div>
+          
+          <div className="flex-1 flex justify-center px-4">
+             {capturedFaceImg ? (
+               <div className="flex items-center bg-gray-100 rounded-full p-1 pr-4 border border-gray-300 shadow-sm w-full max-w-md">
+                  <img src={capturedFaceImg} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
+                  
+                  <div className="flex-1 ml-3">
+                     <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-gray-600 uppercase">
+                          {isScanning ? 'Memindai...' : 'Selesai'}
+                        </span>
+                        <span className="text-xs text-gray-500">{scanIndex} / {driveFiles.length}</span>
+                     </div>
+                     {/* Progress Bar */}
+                     <div className="w-full bg-gray-300 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${isScanning ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`} 
+                          style={{width: `${scanProgress}%`}}
+                        ></div>
+                     </div>
+                  </div>
 
-          <div className="flex-1 max-w-xl flex justify-center gap-2">
-            {capturedFace ? (
-              <div className="flex items-center gap-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-200 animate-in fade-in slide-in-from-top-2 shadow-sm">
-                <img src={capturedFace} alt="Captured" className="w-8 h-8 rounded-full object-cover border border-blue-500" />
-                <div className="flex flex-col leading-none">
-                  <span className="text-[10px] text-blue-600 font-bold uppercase">Pencarian AI</span>
-                  <span className="text-xs text-gray-700 font-medium">
-                    {isSearchingFace ? 'Menganalisis...' : `Wajah Ditemukan`}
-                  </span>
-                </div>
-                <button onClick={clearFaceSearch} className="ml-2 p-1 hover:bg-blue-200 rounded-full text-blue-700">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
+                  <div className="ml-3 flex gap-1">
+                    {isScanning ? (
+                      <button onClick={handleStopScan} className="p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200"><Pause className="w-4 h-4"/></button>
+                    ) : (
+                       scanIndex < driveFiles.length && scanIndex > 0 ? (
+                         <button onClick={() => startScanning(scanIndex)} className="p-2 bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200"><Play className="w-4 h-4"/></button>
+                       ) : null
+                    )}
+                    <button onClick={resetSearch} className="p-2 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300"><X className="w-4 h-4"/></button>
+                  </div>
+               </div>
+             ) : (
                 <button
                   onClick={() => setIsCameraOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-white hover:shadow-md text-gray-600 rounded-full transition-all border border-transparent hover:border-gray-200"
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-all shadow-md active:scale-95"
                 >
-                  <Camera className="w-5 h-5 text-gray-500" />
-                  <span className="text-sm font-medium hidden sm:inline">Scan Wajah</span>
+                  <Camera className="w-5 h-5" />
+                  <span className="font-medium">Cari Wajah</span>
                 </button>
-
-                <button
-                  onClick={toggleSelectionMode}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all border ${
-                    isSelectionMode 
-                      ? 'bg-blue-100 border-blue-300 text-blue-700' 
-                      : 'bg-gray-100 border-transparent text-gray-600 hover:bg-white hover:shadow-md'
-                  }`}
-                >
-                  {isSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-                  <span className="text-sm font-medium hidden sm:inline">{isSelectionMode ? 'Batal Pilih' : 'Pilih Foto'}</span>
-                </button>
-              </>
-            )}
+             )}
           </div>
 
-          <div className="flex items-center gap-3">
-             <button onClick={onRefresh} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors" title="Refresh Data">
-              <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+          <button onClick={onRefresh} className="p-2 hover:bg-gray-100 rounded-full text-gray-500" title="Refresh">
+             <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </nav>
 
-      {/* Main Content */}
+      {/* Main Grid */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {isLoading ? (
           <div className="flex flex-col justify-center items-center h-64">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
-            <p className="text-gray-500 animate-pulse">Mengambil data dari Google Drive...</p>
+             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+             <p className="text-gray-500">Memuat {driveFiles.length > 0 ? 'lagi...' : 'ribuan foto...'}</p>
           </div>
         ) : (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-700 flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-gray-500" />
-                {capturedFace ? 'Hasil Pencarian' : 'Semua Foto'}
-                <span className="text-xs bg-gray-200 px-2 py-0.5 rounded-full text-gray-600 font-normal">
-                  {displayedFiles.length}
-                </span>
-              </h2>
-            </div>
+          <>
+             <div className="flex justify-between items-center mb-4 px-2">
+                <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+                   {userDescriptor ? <Search className="w-4 h-4"/> : <ImageIcon className="w-4 h-4"/>}
+                   {userDescriptor ? `Ditemukan: ${displayedFiles.length}` : `Galeri (${driveFiles.length} foto)`}
+                </h2>
+             </div>
 
-            {displayedFiles.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-8 h-8 text-gray-300" />
+             {displayedFiles.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-xl border border-gray-200 shadow-sm">
+                   <p className="text-gray-500">
+                     {userDescriptor 
+                        ? (isScanning ? "Sedang mencari..." : "Wajah tidak ditemukan di foto yang sudah dipindai.") 
+                        : "Tidak ada foto."}
+                   </p>
                 </div>
-                <p className="text-gray-500">Tidak ada foto ditemukan.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {displayedFiles.map((photo) => {
-                  const isSelected = selectedIds.includes(photo.id);
-                  return (
-                    <div 
-                      key={photo.id}
-                      className={`group relative aspect-[4/5] bg-gray-200 rounded-lg overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all ${
-                        isSelected ? 'ring-4 ring-blue-500' : ''
-                      }`}
-                      onClick={(e) => {
-                        if (isSelectionMode) toggleSelectPhoto(e, photo.id);
-                        else setSelectedPhoto(photo);
-                      }}
-                    >
-                      <img 
-                        src={photo.thumbnail} 
-                        alt={photo.name}
-                        loading="lazy"
-                        className={`w-full h-full object-cover transition-transform duration-500 ${!isSelectionMode && 'group-hover:scale-110'}`}
-                        referrerPolicy="no-referrer"
-                      />
-                      
-                      <div className={`absolute inset-0 bg-black/0 transition-all ${isSelectionMode ? 'hover:bg-black/10' : 'group-hover:bg-black/20'}`} />
-                      
-                      {isSelectionMode && (
-                        <div className="absolute top-2 left-2 z-20">
-                          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
-                            isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white/50 border-white hover:bg-white'
-                          }`}>
-                            {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all">
-                        <p className="text-white text-xs truncate">{photo.name}</p>
+             ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                   {displayedFiles.map(file => (
+                      <div 
+                        key={file.id} 
+                        onClick={() => setSelectedPhoto(file)}
+                        className="group relative aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                      >
+                         <img 
+                           src={file.thumbnail} 
+                           alt={file.name} 
+                           className="w-full h-full object-cover"
+                           loading="lazy"
+                           // CrossOrigin penting untuk FaceAPI
+                           crossOrigin="anonymous" 
+                         />
+                         {/* Indikator Match */}
+                         {userDescriptor && (
+                            <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full shadow-sm font-bold">
+                               MATCH
+                            </div>
+                         )}
                       </div>
-                      
-                      {!isSelectionMode && (
-                        <button 
-                          onClick={(e) => handleDownload(e, photo.downloadUrl)}
-                          className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white shadow-sm"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                   ))}
+                </div>
+             )}
+          </>
         )}
       </main>
 
-      {isSelectionMode && selectedIds.length > 0 && (
-        <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 animate-in slide-in-from-bottom-4">
-          <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4">
-             <span className="text-sm font-medium">{selectedIds.length} foto dipilih</span>
-             <div className="h-4 w-px bg-gray-700"></div>
-             <button 
-                onClick={handleBatchDownload}
-                className="flex items-center gap-2 text-blue-400 hover:text-blue-300 font-bold transition-colors"
-             >
-                <Download className="w-5 h-5" /> Download Masal
-             </button>
-          </div>
-        </div>
-      )}
-
-      {selectedPhoto && (
+       {/* Lightbox */}
+       {selectedPhoto && (
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 backdrop-blur-md">
           <button 
             onClick={() => setSelectedPhoto(null)}
@@ -320,159 +352,71 @@ const DriveGalleryApp = ({ driveFiles, isLoading, onRefresh }) => {
             <X className="w-6 h-6" />
           </button>
 
-          <div className="max-w-5xl w-full flex flex-col items-center">
-            <img 
-              src={selectedPhoto.full || selectedPhoto.thumbnail} 
-              alt={selectedPhoto.name}
-              className="max-h-[80vh] object-contain rounded shadow-2xl"
-              referrerPolicy="no-referrer"
-            />
-            <div className="mt-4 flex gap-3">
-               <button 
-                 onClick={(e) => handleDownload(e, selectedPhoto.downloadUrl)}
-                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-medium flex items-center gap-2 transition-colors"
-               >
-                 <Download className="w-4 h-4" /> Download Asli
-               </button>
-            </div>
-          </div>
+          <img 
+             src={selectedPhoto.full} 
+             alt={selectedPhoto.name}
+             className="max-h-[85vh] object-contain rounded shadow-lg"
+          />
+          <a 
+             href={selectedPhoto.downloadUrl}
+             target="_blank"
+             className="absolute bottom-8 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full font-medium flex items-center gap-2 shadow-xl"
+          >
+             <Download className="w-5 h-5" /> Download HD
+          </a>
         </div>
       )}
     </div>
   );
 };
 
-// --- MAIN ENTRY POINT (SETUP & DATA FETCHING) ---
+// --- ENTRY POINT ---
 export default function App() {
   const [driveFiles, setDriveFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(null);
   const [gasUrl, setGasUrl] = useState('');
 
-  // 1. Cek URL Parameter saat load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlFromParam = params.get('api');
+    let url = params.get('api');
+    if(url && !url.startsWith('http')) {
+       try { url = atob(url); } catch(e){}
+    }
+    const saved = localStorage.getItem('gas_app_url');
+    const finalUrl = url || saved;
     
-    const savedUrl = localStorage.getItem('gas_app_url');
-
-    if (urlFromParam) {
-      // LOGIKA DEKRIPSI (Simple Base64 Detection)
-      let finalUrl = urlFromParam;
-      
-      // Jika string terlihat seperti Base64 (tidak dimulai dengan http), coba decode
-      if (!urlFromParam.startsWith('http')) {
-        try {
-          finalUrl = atob(urlFromParam);
-        } catch (e) {
-          console.error("Gagal decode URL, mungkin bukan Base64 atau rusak");
-          // Fallback ke raw string jika decode gagal
-          finalUrl = urlFromParam;
-        }
-      }
-
-      setGasUrl(finalUrl);
-      localStorage.setItem('gas_app_url', finalUrl);
-    } else if (savedUrl) {
-      setGasUrl(savedUrl);
+    if(finalUrl) {
+       setGasUrl(finalUrl);
+       localStorage.setItem('gas_app_url', finalUrl);
     }
   }, []);
 
-  // 2. Fetch Data jika URL tersedia
   useEffect(() => {
-    if (gasUrl) {
-      fetchData(gasUrl);
-    }
+    if(gasUrl) fetchData(gasUrl);
   }, [gasUrl]);
 
   const fetchData = async (url) => {
     setLoading(true);
-    setErrorMsg(null);
     try {
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      setDriveFiles(data);
-    } catch (err) {
-      console.error("Fetch Error:", err);
-      setErrorMsg("Gagal mengambil data: " + err.message);
+      const res = await fetch(url);
+      const data = await res.json();
+      if(Array.isArray(data)) setDriveFiles(data);
+    } catch(e) {
+      console.error(e);
+      alert("Gagal mengambil data foto. Cek link script.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
-    const inputUrl = e.target.elements.url.value;
-    if (inputUrl) {
-      setGasUrl(inputUrl);
-      localStorage.setItem('gas_app_url', inputUrl);
-    }
-  };
+  if(!gasUrl) return <div className="p-10 text-center">Silakan gunakan Link Generator untuk memasukkan URL Script.</div>;
 
-  if (!gasUrl) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-gray-100">
-           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-               <IconLink className="w-8 h-8 text-blue-600" />
-           </div>
-           <h1 className="text-xl font-bold text-gray-800 mb-2">Setup Koneksi</h1>
-           <p className="text-gray-600 mb-6 text-sm">
-              Gunakan <b>Generator Link</b> untuk membuat link yang aman (terenkripsi).
-           </p>
-           
-           <form onSubmit={handleManualSubmit} className="space-y-4">
-             <input 
-               name="url"
-               type="text" 
-               placeholder="Paste Link Terenkripsi atau URL Script" 
-               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-               required
-             />
-             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors">
-               Mulai Galeri
-             </button>
-           </form>
-           
-           <p className="text-xs text-gray-400 mt-4">
-             <a href="/generator.html" className="underline hover:text-blue-600">Buka Generator Link</a>
-           </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (errorMsg) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-red-50 p-4 text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-bold text-red-700">Terjadi Kesalahan</h3>
-        <p className="text-red-600 mb-6">{errorMsg}</p>
-        <button 
-          onClick={() => fetchData(gasUrl)} 
-          className="px-6 py-2 bg-white border border-red-200 text-red-600 rounded-full hover:bg-red-50"
-        >
-          Coba Lagi
-        </button>
-        <button 
-          onClick={() => { setGasUrl(''); localStorage.removeItem('gas_app_url'); }}
-          className="mt-4 text-sm text-gray-500 underline"
-        >
-          Ganti URL Script
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <DriveGalleryApp 
-      driveFiles={driveFiles} 
-      isLoading={loading} 
-      onRefresh={() => fetchData(gasUrl)}
-    />
-  );
+  return <DriveGalleryApp driveFiles={driveFiles} isLoading={loading} onRefresh={() => fetchData(gasUrl)}/>;
 }
+```
+
+### Instruksi Penting (Agar Face Detection Jalan):
+
+1.  **Index.html:** Anda harus menambahkan satu baris script `face-api.js` di dalam file `index.html` (di bagian `<head>`), karena kita menggunakannya di `App.jsx`.
+    ```html
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
