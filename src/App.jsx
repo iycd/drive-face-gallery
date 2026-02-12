@@ -14,7 +14,6 @@ import {
   CheckSquare,
   AlertCircle,
   ChevronLeft,
-  // FIX: Menambahkan import yang hilang
   Folder as FolderIcon,
   CheckCircle2
 } from 'lucide-react';
@@ -22,8 +21,6 @@ import {
 // ==========================================
 // UTILITY: LOAD FACE API SCRIPT AUTOMATICALLY
 // ==========================================
-// Fungsi ini memastikan library face-api.js termuat, 
-// bahkan jika user lupa menambahkannya di index.html
 const loadFaceApiScript = () => {
   return new Promise((resolve) => {
     if (window.faceapi || document.getElementById('face-api-script')) {
@@ -37,7 +34,7 @@ const loadFaceApiScript = () => {
     script.onload = () => resolve();
     script.onerror = () => {
       console.error("Gagal memuat face-api.js otomatis");
-      resolve(); // Tetap resolve agar aplikasi tidak hang, nanti ditangani di CameraModal
+      resolve(); 
     };
     document.head.appendChild(script);
   });
@@ -69,74 +66,76 @@ const useLongPress = (callback = () => {}, ms = 500) => {
 };
 
 // ==========================================
-// CAMERA MODAL (DIPERBAIKI UNTUK MASALAH LAYAR PUTIH)
+// CAMERA MODAL (DIPERBAIKI DENGAN TIMEOUT)
 // ==========================================
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [isTimeOut, setIsTimeOut] = useState(false);
 
-  // 1. Load Model AI (Background Process)
+  // 1. Load Model AI
   useEffect(() => {
+    let isMounted = true;
     const loadModels = async () => {
        try {
-         // Pastikan script utama face-api ada dulu
          await loadFaceApiScript();
 
          if (!window.faceapi) {
-            throw new Error("Library face-api tidak ditemukan.");
+            if(isMounted) setErrorMsg("Gagal memuat library AI.");
+            return;
          }
 
-         // Menggunakan CDN GitHub yang stabil
          const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
          
-         // Load paralel agar cepat
          await Promise.all([
            window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
            window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
            window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
          ]);
          
-         setModelLoaded(true);
+         if(isMounted) setModelLoaded(true);
        } catch (e) {
          console.error("Gagal load model AI", e);
-         // Jangan set error global, biarkan kamera tetap jalan meski AI gagal (fallback manual)
+         if(isMounted) setErrorMsg("Koneksi lambat, AI gagal dimuat.");
        }
     };
     
     if (isOpen) {
       loadModels();
+      // Set timeout 15 detik jika AI macet
+      const timeoutId = setTimeout(() => {
+        if(isMounted && !modelLoaded) setIsTimeOut(true);
+      }, 15000);
+      return () => clearTimeout(timeoutId);
     }
+    
+    return () => { isMounted = false; };
   }, [isOpen]);
 
-  // 2. Start Camera (Prioritas Utama)
+  // 2. Start Camera
   useEffect(() => {
     let stream = null;
-    
     const startCamera = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'user' } // Kamera depan
+          video: { facingMode: 'user' } 
         });
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // Event listener untuk memastikan video benar-benar jalan
           videoRef.current.onloadedmetadata = () => {
             setCameraReady(true);
             videoRef.current.play().catch(e => console.error("Play error:", e));
           };
         }
       } catch (err) {
-        console.error("Camera Error:", err);
-        setErrorMsg("Tidak dapat mengakses kamera. Pastikan izin diberikan.");
+        setErrorMsg("Izin kamera ditolak.");
       }
     };
 
-    if (isOpen) {
-      startCamera();
-    }
+    if (isOpen) startCamera();
 
     return () => {
       if (stream) stream.getTracks().forEach(track => track.stop());
@@ -146,17 +145,13 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const handleCapture = async () => {
     if (!videoRef.current || !cameraReady) return;
 
-    // Ambil gambar dari video
     const videoEl = videoRef.current;
     const canvas = document.createElement('canvas');
     canvas.width = videoEl.videoWidth;
     canvas.height = videoEl.videoHeight;
     const ctx = canvas.getContext('2d');
-    
-    // Draw video ke canvas
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     
-    // Jika AI sudah siap, coba deteksi
     if (modelLoaded && window.faceapi) {
       try {
         const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions())
@@ -167,14 +162,13 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
           const dataUrl = canvas.toDataURL('image/jpeg');
           onCapture(dataUrl, detection.descriptor);
         } else {
-          alert("Wajah tidak terdeteksi. Posisikan wajah di tengah dan pencahayaan cukup.");
+          alert("Wajah tidak terdeteksi. Posisikan wajah di tengah.");
         }
       } catch (err) {
-        console.error("AI Error:", err);
-        alert("Terjadi kesalahan pada deteksi wajah.");
+        alert("Terjadi kesalahan deteksi.");
       }
     } else {
-      alert("AI sedang disiapkan... Tunggu sebentar lagi.");
+      alert("AI belum siap.");
     }
   };
 
@@ -184,27 +178,17 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-0 sm:p-4">
       <div className="bg-black sm:bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-xl flex flex-col relative overflow-hidden">
         
-        {/* AREA KAMERA */}
         <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
           
-          {/* Pesan Error */}
           {errorMsg && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-white p-4 text-center">
-              <AlertCircle className="w-10 h-10 text-red-500 mb-2"/>
-              <p>{errorMsg}</p>
-              <button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-800 rounded-full">Tutup</button>
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-white p-6 text-center bg-black/90">
+              <AlertCircle className="w-12 h-12 text-red-500 mb-4"/>
+              <p className="mb-6">{errorMsg}</p>
+              <button onClick={onClose} className="px-6 py-2 bg-gray-700 rounded-full hover:bg-gray-600">Tutup</button>
             </div>
           )}
 
-          {/* Loader saat kamera belum ready */}
-          {!cameraReady && !errorMsg && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center z-10 text-white">
-              <Loader2 className="w-8 h-8 animate-spin mb-2"/>
-              <p>Membuka kamera...</p>
-            </div>
-          )}
-
-          {/* Elemen Video (Wajib muted & playsInline untuk mobile) */}
+          {/* Video Feed */}
           <video 
             ref={videoRef} 
             autoPlay 
@@ -213,23 +197,21 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
             className={`w-full h-full object-cover transform -scale-x-100 transition-opacity duration-500 ${cameraReady ? 'opacity-100' : 'opacity-0'}`}
           />
 
-          {/* Overlay Status AI */}
-          {cameraReady && !modelLoaded && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-xs flex items-center gap-2 backdrop-blur-sm">
-               <Loader2 className="w-3 h-3 animate-spin"/> Menyiapkan AI...
+          {/* Loading Overlay */}
+          {cameraReady && !modelLoaded && !errorMsg && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/60 px-4 py-2 rounded-full text-white text-xs flex items-center gap-2 backdrop-blur-md border border-white/10 shadow-lg z-10">
+               <Loader2 className="w-3 h-3 animate-spin"/> 
+               {isTimeOut ? "Koneksi lambat..." : "Menyiapkan AI..."}
             </div>
           )}
 
-          {/* Panduan Wajah */}
           <div className="absolute inset-0 m-[15%] border-2 border-dashed border-white/40 rounded-full pointer-events-none"></div>
           
-          {/* Tombol Tutup */}
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full hover:bg-black/60 backdrop-blur-md z-30">
             <X className="w-6 h-6"/>
           </button>
         </div>
 
-        {/* TOMBOL CAPTURE */}
         <div className="p-6 bg-black sm:bg-white flex justify-center border-t border-gray-800 sm:border-gray-100">
           <button 
             onClick={handleCapture}
@@ -255,7 +237,21 @@ const DriveGalleryApp = ({ gasUrl }) => {
   const [currentFiles, setCurrentFiles] = useState([]);
   const [subFolders, setSubFolders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [folderHistory, setFolderHistory] = useState([{ id: 'root', name: 'Home' }]);
+  
+  // FIX: INISIALISASI FOLDER DARI URL
+  // Jika gasUrl mengandung folderId, gunakan itu sebagai 'Home'
+  const [folderHistory, setFolderHistory] = useState(() => {
+    try {
+      const urlObj = new URL(gasUrl);
+      const initialId = urlObj.searchParams.get('folderId');
+      // Jika ada folderId spesifik dan bukan 'root', jadikan folder awal
+      if (initialId && initialId !== 'root') {
+        return [{ id: initialId, name: 'Folder Utama' }];
+      }
+    } catch(e) {}
+    return [{ id: 'root', name: 'Home' }];
+  });
+
   const currentFolder = folderHistory[folderHistory.length - 1];
 
   // Selection
@@ -277,10 +273,10 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setIsLoading(true);
     try {
       const urlObj = new URL(gasUrl);
+      // Selalu update parameter folderId dengan yang sedang aktif
       urlObj.searchParams.set('folderId', folderId);
       
       const res = await fetch(urlObj.toString());
-      // Validasi content type untuk menghindari error parsing HTML
       const contentType = res.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         throw new Error("Respon server salah (HTML). Cek deployment GAS.");
@@ -314,10 +310,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
       setIsScanning(false);
       return;
     }
-    // Pastikan faceapi ada
-    if (!window.faceapi) {
-        await loadFaceApiScript();
-    }
+    if (!window.faceapi) await loadFaceApiScript();
 
     setIsScanning(true);
     stopScanRef.current = false;
@@ -392,7 +385,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
     <div className="min-h-screen bg-gray-50 pb-24 font-sans select-none">
       {isCameraOpen && <CameraModal isOpen={true} onClose={() => setIsCameraOpen(false)} onCapture={handleCapture} />}
 
-      {/* NAVBAR */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
           <div className="flex items-center gap-2 overflow-hidden flex-1">
@@ -414,7 +406,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
           </div>
         </div>
 
-        {/* STATUS BAR SEARCH */}
         {capturedFaceImg && (
            <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 flex items-center gap-3">
               <img src={capturedFaceImg} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
@@ -432,7 +423,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
            </div>
         )}
 
-        {/* TABS */}
         {subFolders.length > 0 && !capturedFaceImg && (
           <div className="px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-gray-50 border-b border-gray-200">
             {subFolders.map(folder => (
@@ -451,7 +441,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
         </div>
       )}
 
-      {/* GRID */}
       <main className="p-2 sm:p-4">
         {isLoading && currentFiles.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-gray-400"><Loader2 className="w-8 h-8 animate-spin mb-2" /><p>Memuat...</p></div>
@@ -505,9 +494,7 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick, isM
 export default function App() {
   const [gasUrl, setGasUrl] = useState('');
   useEffect(() => {
-    // Pastikan script face-api termuat saat aplikasi start
     loadFaceApiScript();
-
     const params = new URLSearchParams(window.location.search);
     let url = params.get('api');
     if(url && !url.startsWith('http')) { try { url = atob(url); } catch(e){} }
