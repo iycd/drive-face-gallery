@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Drive Gallery Link Generator</title>
+    <title>GAS Secure Link Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -11,64 +11,55 @@
 
     <div class="max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
         <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div class="bg-green-600 px-8 py-6">
+            <div class="bg-purple-700 px-8 py-6">
                 <h1 class="text-2xl font-bold text-white flex items-center gap-3">
-                    <i class="fa-solid fa-shield-halved"></i> Secure Link Generator
+                    <i class="fa-solid fa-user-secret"></i> Enkripsi Link Galeri
                 </h1>
-                <p class="text-green-100 mt-2 text-sm">Buat link akses galeri dengan data kredensial terenkripsi (disembunyikan).</p>
+                <p class="text-purple-100 mt-2 text-sm">Sembunyikan URL Google Apps Script Anda menjadi kode acak yang aman.</p>
             </div>
 
             <div class="p-8 space-y-6">
                 
                 <!-- Input Base URL -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Alamat Aplikasi</label>
-                    <!-- UPDATE: Menghapus value hardcoded agar tidak error 404 -->
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Alamat Aplikasi (Vercel)</label>
                     <input type="text" id="baseUrl" placeholder="https://app-anda.vercel.app" 
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all outline-none">
-                    <p class="text-xs text-gray-400 mt-1">Otomatis mendeteksi alamat website Anda saat ini.</p>
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
+                    <p class="text-xs text-gray-400 mt-1">Link aplikasi galeri Anda yang sudah di-deploy.</p>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Client ID -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">OAuth Client ID</label>
-                        <input type="text" id="clientId" placeholder="123456...apps.googleusercontent.com" 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
-                    </div>
-
-                    <!-- API Key -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-                        <input type="text" id="apiKey" placeholder="AIzaSy..." 
-                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
-                    </div>
+                <!-- Script URL -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">URL Web App (Google Apps Script)</label>
+                    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec" 
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
+                    <p class="text-xs text-gray-400 mt-1">URL Backend JSON Anda.</p>
                 </div>
 
                 <!-- Folder ID -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Folder ID</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Folder ID Google Drive</label>
                     <input type="text" id="folderId" placeholder="root" 
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
                 </div>
 
                 <hr class="border-gray-200">
 
                 <!-- Result Section -->
                 <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Link Aman Anda:</label>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Link Terenkripsi:</label>
                     
                     <div class="flex gap-2">
                         <input type="text" id="resultLink" readonly 
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-green-700 font-mono text-xs focus:outline-none select-all break-all">
+                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-purple-700 font-mono text-xs focus:outline-none select-all break-all">
                         
                         <button onclick="copyLink()" class="bg-gray-800 hover:bg-black text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap">
                             <i class="fa-regular fa-copy"></i> Copy
                         </button>
                     </div>
 
-                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md">
-                        Buka Galeri Aman <i class="fa-solid fa-arrow-up-right-from-square ml-2"></i>
+                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md">
+                        Buka Galeri <i class="fa-solid fa-arrow-up-right-from-square ml-2"></i>
                     </a>
                 </div>
 
@@ -76,55 +67,46 @@
         </div>
         
         <p class="text-center text-gray-400 text-xs mt-8">
-            Data Anda dienkripsi lokal di browser dan tidak dikirim ke server kami.
+            Enkripsi dilakukan lokal (Base64 Encoding) untuk menyamarkan URL asli.
         </p>
     </div>
 
     <script>
-        const inputs = ['baseUrl', 'clientId', 'apiKey', 'folderId'];
+        const inputs = ['baseUrl', 'scriptUrl', 'folderId'];
         
-        // UPDATE: Otomatis mengisi Base URL dengan alamat saat ini
         window.onload = function() {
-            // Mengambil origin (contoh: http://localhost:5173 atau https://myapp.vercel.app)
             const currentOrigin = window.location.origin;
             
-            // Cek jika dibuka langsung sebagai file (bukan server), beri peringatan atau default
             if (currentOrigin === 'null' || currentOrigin.startsWith('file://')) {
                  document.getElementById('baseUrl').value = "http://localhost:5173";
             } else {
                  document.getElementById('baseUrl').value = currentOrigin;
             }
             
-            // Restore data from localStorage if available (optional convenience)
-            if(localStorage.getItem('saved_clientId')) document.getElementById('clientId').value = localStorage.getItem('saved_clientId');
+            if(localStorage.getItem('saved_scriptUrl')) document.getElementById('scriptUrl').value = localStorage.getItem('saved_scriptUrl');
             
             generateLink();
         };
 
         function generateLink() {
             const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, ""); 
-            const clientId = document.getElementById('clientId').value.trim();
-            const apiKey = document.getElementById('apiKey').value.trim();
+            let scriptUrl = document.getElementById('scriptUrl').value.trim();
             const folderId = document.getElementById('folderId').value.trim() || 'root';
 
-            if(!baseUrl || !clientId || !apiKey) return;
-            
-            // Simpan credential sementara di browser user agar tidak perlu ketik ulang saat refresh
-            localStorage.setItem('saved_clientId', clientId);
+            if(!baseUrl || !scriptUrl) return;
 
-            // ENKRIPSI SEDERHANA (Base64 Encoding dengan JSON minified)
-            const payload = {
-                c: clientId,
-                k: apiKey,
-                f: folderId
-            };
-            
-            // Ubah ke JSON String -> Lalu Encode ke Base64
-            const jsonString = JSON.stringify(payload);
-            const encryptedData = btoa(jsonString);
+            localStorage.setItem('saved_scriptUrl', scriptUrl);
 
-            // Buat URL baru: ?data=xyz...
-            const finalLink = `${baseUrl}/?data=${encryptedData}`;
+            // 1. Gabungkan URL Script dengan Folder ID
+            const separator = scriptUrl.includes('?') ? '&' : '?';
+            const finalScriptUrl = `${scriptUrl}${separator}folderId=${folderId}`;
+
+            // 2. ENKRIPSI (Base64)
+            // Ini akan mengubah URL panjang menjadi string acak seperti "aHR0cHM6Ly..."
+            const encryptedApiUrl = btoa(finalScriptUrl);
+
+            // 3. Buat URL Akhir
+            const finalLink = `${baseUrl}/?api=${encryptedApiUrl}`;
 
             document.getElementById('resultLink').value = finalLink;
             document.getElementById('previewBtn').href = finalLink;
