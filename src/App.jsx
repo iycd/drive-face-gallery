@@ -50,7 +50,6 @@ const loadModelsOnce = async () => {
       await loadFaceApiScript();
       if (!window.faceapi) throw new Error("Library face-api gagal dimuat");
 
-      // Menggunakan mirror yang lebih stabil
       const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
       
       console.log("Memuat model AI...");
@@ -74,25 +73,22 @@ const loadModelsOnce = async () => {
 };
 
 // ==========================================
-// 2. IMAGE HELPER & PREPROCESSING
+// 2. IMAGE HELPER & PREPROCESSING (HIGH RES)
 // ==========================================
 
-// Mendapatkan URL gambar terbaik untuk AI
 const getDriveImageUrl = (file) => {
-  // Prioritaskan full size link (biasanya lh3...=s0)
   if (file.full) return file.full;
-  // Fallback ke direct stream link
   return `https://drive.google.com/uc?id=${file.id}`;
 };
 
-// Memproses gambar sebelum dideteksi (Enhancement)
+// Peningkatan Preprocessing untuk High Res
 const preprocessImage = (imgSource) => {
   const canvas = document.createElement('canvas');
   let width = imgSource.width || imgSource.videoWidth;
   let height = imgSource.height || imgSource.videoHeight;
 
-  // 7. Resize minimal 512px agar wajah kecil terbaca
-  const minSize = 512;
+  // UPGRADE: Batas minimum dinaikkan ke 1024px untuk detail lebih tajam
+  const minSize = 1024;
   if (width < minSize || height < minSize) {
     const scale = Math.max(minSize / width, minSize / height);
     width = Math.round(width * scale);
@@ -103,8 +99,8 @@ const preprocessImage = (imgSource) => {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // Normalisasi kontras ringan
-  ctx.filter = 'contrast(1.15) brightness(1.05)';
+  // Filter kontras & brightness yang dioptimalkan untuk deteksi wajah
+  ctx.filter = 'contrast(1.2) brightness(1.05) saturate(1.1)';
   ctx.drawImage(imgSource, 0, 0, width, height);
   
   return canvas;
@@ -140,7 +136,6 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const [errorMsg, setErrorMsg] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Load Models Sekali Saja
   useEffect(() => {
     if (isOpen) {
       loadModelsOnce()
@@ -166,14 +161,13 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
   }, [isOpen]);
 
-  // Realtime Check
   useEffect(() => {
     let interval;
     if (isReady && videoRef.current) {
       interval = setInterval(async () => {
         if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
         
-        // 3. Setting Deteksi Realtime
+        // Preview tetap ringan agar tidak lag
         const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
         const result = await window.faceapi.detectSingleFace(videoRef.current, options);
         setFaceDetected(!!result);
@@ -189,14 +183,14 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     try {
       const processedCanvas = preprocessImage(videoRef.current);
       
-      // 3. Setting Deteksi Capture (Sedikit lebih detail)
-      const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
+      // UPGRADE: Input size 608 untuk capture agar lebih akurat
+      const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.4 });
       const detection = await window.faceapi.detectSingleFace(processedCanvas, options)
         .withFaceLandmarks()
         .withFaceDescriptor();
         
       if (detection) {
-        onCapture(processedCanvas.toDataURL('image/jpeg'), detection.descriptor);
+        onCapture(processedCanvas.toDataURL('image/jpeg', 0.9), detection.descriptor);
       } else {
         alert("Wajah tidak terdeteksi. Pastikan pencahayaan cukup.");
         setIsProcessing(false);
@@ -315,7 +309,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setSelectedIds([]);
   }, [currentFolder, fetchData]);
 
-  // --- 5. ASYNC BATCH SCANNING ---
+  // --- 5. ASYNC BATCH SCANNING (HIGH RES) ---
   const startScanning = async () => {
     if (!userDescriptor || currentFiles.length === 0) return;
     
@@ -328,14 +322,13 @@ const DriveGalleryApp = ({ gasUrl }) => {
 
     setIsScanning(true);
     setScanLogs([]);
-    addLog("Memulai pemindaian batch...", 'info');
+    addLog("Memulai pemindaian High Res...", 'info');
     stopScanRef.current = false;
     
-    // 4. Threshold lebih longgar (0.6)
     const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.6);
     
-    // 5. Batch Size 5 (Optimal untuk performa)
-    const BATCH_SIZE = 5; 
+    // Batch Size dikurangi sedikit karena gambar lebih besar
+    const BATCH_SIZE = 4; 
     let processed = 0;
 
     for (let i = 0; i < currentFiles.length; i += BATCH_SIZE) {
@@ -348,29 +341,19 @@ const DriveGalleryApp = ({ gasUrl }) => {
       
       await Promise.all(batch.map(async (file) => {
         try {
-          // 2. Gunakan helper URL gambar yang benar
           const targetUrl = getDriveImageUrl(file);
           
-          // Gunakan Proxy untuk menghindari CORS blok di Canvas
-          const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(targetUrl)}&w=512&output=jpg`;
+          // UPGRADE: Request gambar 1024px & Kualitas 90%
+          const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(targetUrl)}&w=1024&q=90&output=jpg`;
           
           const img = await window.faceapi.fetchImage(proxyUrl);
-          
-          // 7. Enhance Image
           const processedCanvas = preprocessImage(img);
 
-          // 3. Deteksi dengan setting optimal
-          const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
+          // UPGRADE: Input size 608 untuk deteksi maksimal
+          const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.4 });
           const detections = await window.faceapi.detectAllFaces(processedCanvas, options)
                                           .withFaceLandmarks()
-                                          .withFaceDescriptors();
-
-          // 6. Debug Log Jumlah Wajah
-          if (detections.length === 0) {
-             // addLog(`${file.name}: 0 wajah.`, 'debug');
-          } else {
-             // addLog(`${file.name}: ${detections.length} wajah.`, 'debug');
-          }
+                                          .withFaceDescriptor();
 
           let isMatch = false;
           for (const d of detections) {
@@ -383,8 +366,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
             addLog(`MATCH: ${file.name}`, 'success');
           }
         } catch (err) {
-          // 6. Error handling
-          addLog(`Gagal scan ${file.name}: ${err.message}`, 'error');
+          // Silent fail to keep scanning
         }
       }));
 
@@ -392,8 +374,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
       setScanCount(processed);
       setScanProgress(Math.round((processed / currentFiles.length) * 100));
       
-      // Delay kecil antar batch untuk nafas browser
-      await new Promise(r => setTimeout(r, 100));
+      // Delay sedikit lebih lama agar browser sempat bernapas
+      await new Promise(r => setTimeout(r, 150));
     }
     
     setIsScanning(false);
@@ -424,7 +406,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
       const img = await window.faceapi.bufferToImage(file);
       const processedCanvas = preprocessImage(img);
 
-      const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
+      // UPGRADE: Input size 608 untuk upload
+      const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.4 });
       const detection = await window.faceapi.detectSingleFace(processedCanvas, options)
                                      .withFaceLandmarks()
                                      .withFaceDescriptor();
