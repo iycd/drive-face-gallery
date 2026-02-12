@@ -413,10 +413,3 @@ export default function App() {
 
   return <DriveGalleryApp driveFiles={driveFiles} isLoading={loading} onRefresh={() => fetchData(gasUrl)}/>;
 }
-```
-
-### Instruksi Penting (Agar Face Detection Jalan):
-
-1.  **Index.html:** Anda harus menambahkan satu baris script `face-api.js` di dalam file `index.html` (di bagian `<head>`), karena kita menggunakannya di `App.jsx`.
-    ```html
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
