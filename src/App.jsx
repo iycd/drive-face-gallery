@@ -13,8 +13,35 @@ import {
   Square,
   CheckSquare,
   AlertCircle,
-  ChevronLeft
+  ChevronLeft,
+  // FIX: Menambahkan import yang hilang
+  Folder as FolderIcon,
+  CheckCircle2
 } from 'lucide-react';
+
+// ==========================================
+// UTILITY: LOAD FACE API SCRIPT AUTOMATICALLY
+// ==========================================
+// Fungsi ini memastikan library face-api.js termuat, 
+// bahkan jika user lupa menambahkannya di index.html
+const loadFaceApiScript = () => {
+  return new Promise((resolve) => {
+    if (window.faceapi || document.getElementById('face-api-script')) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'face-api-script';
+    script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+    script.crossOrigin = 'anonymous';
+    script.onload = () => resolve();
+    script.onerror = () => {
+      console.error("Gagal memuat face-api.js otomatis");
+      resolve(); // Tetap resolve agar aplikasi tidak hang, nanti ditangani di CameraModal
+    };
+    document.head.appendChild(script);
+  });
+};
 
 // ==========================================
 // CUSTOM HOOK: LONG PRESS
@@ -54,14 +81,21 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
   useEffect(() => {
     const loadModels = async () => {
        try {
+         // Pastikan script utama face-api ada dulu
+         await loadFaceApiScript();
+
+         if (!window.faceapi) {
+            throw new Error("Library face-api tidak ditemukan.");
+         }
+
          // Menggunakan CDN GitHub yang stabil
          const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
          
          // Load paralel agar cepat
          await Promise.all([
-           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+           window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+           window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+           window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
          ]);
          
          setModelLoaded(true);
@@ -123,9 +157,9 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     
     // Jika AI sudah siap, coba deteksi
-    if (modelLoaded) {
+    if (modelLoaded && window.faceapi) {
       try {
-        const detection = await faceapi.detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+        const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions())
                                        .withFaceLandmarks()
                                        .withFaceDescriptor();
 
@@ -280,9 +314,14 @@ const DriveGalleryApp = ({ gasUrl }) => {
       setIsScanning(false);
       return;
     }
+    // Pastikan faceapi ada
+    if (!window.faceapi) {
+        await loadFaceApiScript();
+    }
+
     setIsScanning(true);
     stopScanRef.current = false;
-    const faceMatcher = new faceapi.FaceMatcher(userDescriptor, 0.5);
+    const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.5);
 
     for (let i = startIdx; i < currentFiles.length; i++) {
       if (stopScanRef.current) break;
@@ -290,8 +329,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
       setScanProgress(Math.round(((i + 1) / currentFiles.length) * 100));
       const file = currentFiles[i];
       try {
-        const img = await faceapi.fetchImage(file.thumbnail, { mode: 'cors' });
-        const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
+        const img = await window.faceapi.fetchImage(file.thumbnail, { mode: 'cors' });
+        const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions())
                                         .withFaceLandmarks().withFaceDescriptors();
         let isMatch = false;
         for (const d of detections) {
@@ -466,6 +505,9 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick, isM
 export default function App() {
   const [gasUrl, setGasUrl] = useState('');
   useEffect(() => {
+    // Pastikan script face-api termuat saat aplikasi start
+    loadFaceApiScript();
+
     const params = new URLSearchParams(window.location.search);
     let url = params.get('api');
     if(url && !url.startsWith('http')) { try { url = atob(url); } catch(e){} }
