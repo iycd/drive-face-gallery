@@ -18,7 +18,8 @@ import {
   Folder as FolderIcon,
   CheckCircle2,
   User,
-  Zap
+  Zap,
+  ScanFace // Icon baru
 } from 'lucide-react';
 
 // ==========================================
@@ -57,19 +58,22 @@ const useLongPress = (callback = () => {}, ms = 500) => {
 };
 
 // ==========================================
-// COMPONENT: CAMERA MODAL
+// COMPONENT: CAMERA MODAL (REAL-TIME SCANNING)
 // ==========================================
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
+  const canvasRef = useRef(null); // Canvas untuk gambar kotak wajah
   const [modelLoaded, setModelLoaded] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
+  // 1. Load Model
   useEffect(() => {
     const loadModels = async () => {
        try {
          await loadFaceApiScript();
-         // Menggunakan model Tiny agar cepat di HP
          const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
          await Promise.all([
            window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
@@ -77,11 +81,12 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
            window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
          ]);
          setModelLoaded(true);
-       } catch (e) { setErrorMsg("Gagal memuat AI."); }
+       } catch (e) { setErrorMsg("Gagal memuat AI. Cek koneksi internet."); }
     };
     if (isOpen) loadModels();
   }, [isOpen]);
 
+  // 2. Start Camera
   useEffect(() => {
     let stream = null;
     const startCamera = async () => {
@@ -100,8 +105,33 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
   }, [isOpen]);
 
+  // 3. Real-time Detection Loop
+  useEffect(() => {
+    let interval;
+    
+    if (cameraReady && modelLoaded && videoRef.current) {
+      interval = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
+
+        // Opsi deteksi ringan untuk preview real-time
+        const options = new window.faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+        const result = await window.faceapi.detectSingleFace(videoRef.current, options);
+
+        if (result) {
+          setFaceDetected(true);
+          // (Opsional) Bisa gambar kotak di sini jika mau
+        } else {
+          setFaceDetected(false);
+        }
+      }, 500); // Cek setiap 0.5 detik
+    }
+    return () => clearInterval(interval);
+  }, [cameraReady, modelLoaded]);
+
   const handleCapture = async () => {
     if (!videoRef.current || !cameraReady || !modelLoaded) return;
+    
+    setIsProcessing(true);
     const videoEl = videoRef.current;
     const canvas = document.createElement('canvas');
     canvas.width = videoEl.videoWidth;
@@ -110,14 +140,21 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     ctx.drawImage(videoEl, 0, 0);
     
     try {
-      // Gunakan TinyFaceDetector untuk capture juga
-      const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+      // Gunakan resolusi lebih tinggi untuk capture akhir
+      const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions({ inputSize: 512 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+        
       if (detection) {
         onCapture(canvas.toDataURL('image/jpeg'), detection.descriptor);
       } else {
-        alert("Wajah tidak terdeteksi. Pastikan cahaya cukup.");
+        alert("Wajah hilang saat dijepret. Coba tahan posisi wajah.");
+        setIsProcessing(false);
       }
-    } catch (err) { alert("Error proses AI."); }
+    } catch (err) { 
+      alert("Error proses AI.");
+      setIsProcessing(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -127,14 +164,45 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
       <div className="bg-black sm:bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-xl flex flex-col relative overflow-hidden">
         <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
           {errorMsg && <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-white bg-black/90 p-4">{errorMsg}<button onClick={onClose} className="mt-4 px-4 py-2 bg-gray-700 rounded-full">Tutup</button></div>}
+          
           <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover transform -scale-x-100 ${cameraReady ? 'opacity-100' : 'opacity-0'}`} />
-          {cameraReady && !modelLoaded && !errorMsg && <div className="absolute top-4 bg-black/60 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md z-10">Menyiapkan AI...</div>}
-          <div className="absolute inset-0 m-[15%] border-2 border-dashed border-white/40 rounded-full pointer-events-none"></div>
+          
+          {/* Indikator Loading Awal */}
+          {cameraReady && !modelLoaded && !errorMsg && (
+            <div className="absolute top-4 bg-black/60 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md z-10 flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin"/> Menyiapkan AI...
+            </div>
+          )}
+
+          {/* Indikator Wajah Terdeteksi */}
+          {modelLoaded && (
+             <div className={`absolute top-4 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md z-10 font-bold flex items-center gap-2 transition-all ${faceDetected ? 'bg-green-500/80' : 'bg-red-500/60'}`}>
+                {faceDetected ? <CheckCircle2 className="w-4 h-4"/> : <ScanFace className="w-4 h-4"/>}
+                {faceDetected ? "WAJAH TERDETEKSI" : "POSISIKAN WAJAH"}
+             </div>
+          )}
+
+          {/* Frame Guide */}
+          <div className={`absolute inset-0 m-[15%] border-4 border-dashed rounded-[30px] pointer-events-none transition-colors duration-300 ${faceDetected ? 'border-green-400' : 'border-white/30'}`}></div>
+          
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-30"><X className="w-6 h-6"/></button>
         </div>
+        
         <div className="p-6 bg-black sm:bg-white flex justify-center border-t border-gray-800 sm:border-gray-100">
-          <button onClick={handleCapture} disabled={!modelLoaded} className={`w-16 h-16 rounded-full border-[5px] flex items-center justify-center ${modelLoaded ? 'border-blue-500 bg-white' : 'border-gray-500 bg-gray-800 opacity-50'}`}>
-            <div className={`w-14 h-14 rounded-full border-2 border-black/10`}></div>
+          <button 
+            onClick={handleCapture} 
+            disabled={!modelLoaded || isProcessing} 
+            className={`w-16 h-16 rounded-full border-[5px] flex items-center justify-center transition-all ${
+              faceDetected 
+                ? 'border-green-500 bg-white scale-110 shadow-green-500/50 shadow-lg cursor-pointer' 
+                : 'border-gray-600 bg-gray-800 opacity-70 cursor-not-allowed'
+            }`}
+          >
+            {isProcessing ? (
+               <Loader2 className="w-8 h-8 text-blue-500 animate-spin"/>
+            ) : (
+               <div className={`w-14 h-14 rounded-full border-2 ${faceDetected ? 'border-green-500 bg-green-50' : 'border-gray-500 bg-gray-900'}`}></div>
+            )}
           </button>
         </div>
       </div>
@@ -184,7 +252,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
       urlObj.searchParams.set('folderId', folderId);
       
       const res = await fetch(urlObj.toString());
-      const data = await res.json(); // Asumsi backend sudah JSON
+      const data = await res.json();
       
       if (data.error) throw new Error(data.error);
 
@@ -194,8 +262,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
 
       resetSearch();
     } catch (e) {
-      // alert("Gagal memuat: " + e.message); 
-      // Silent error agar tidak mengganggu jika koneksi putus nyambung
+      // Silent error
     } finally {
       setIsLoading(false);
     }
@@ -207,7 +274,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setSelectedIds([]);
   }, [currentFolder, fetchData]);
 
-  // --- TURBO SCANNING LOGIC (PARALLEL + PROXY) ---
+  // --- TURBO SCANNING LOGIC ---
   const startScanning = async () => {
     if (!userDescriptor || currentFiles.length === 0) return;
     
@@ -216,10 +283,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setIsScanning(true);
     stopScanRef.current = false;
     
-    // Tweak Toleransi: 0.5 cukup ketat, 0.6 lebih longgar (lebih banyak hasil)
     const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.55);
-    
-    // Batch size: Proses 3 foto sekaligus agar cepat
     const BATCH_SIZE = 3; 
     let processed = 0;
 
@@ -228,38 +292,25 @@ const DriveGalleryApp = ({ gasUrl }) => {
 
       const batch = currentFiles.slice(i, i + BATCH_SIZE);
       
-      // Proses batch secara paralel
       await Promise.all(batch.map(async (file) => {
         try {
-          // SOLUSI UTAMA: Menggunakan Proxy 'corsproxy.io' untuk bypass blokir Google
-          // Tanpa ini, AI melihat kanvas kosong -> 0 Matches
+          // PROXY: Bypass CORS Google Drive
           const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(file.thumbnail);
-          
           const img = await window.faceapi.fetchImage(proxyUrl);
-          
-          const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions())
-                                          .withFaceLandmarks()
-                                          .withFaceDescriptors();
+          const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
 
           let isMatch = false;
           for (const d of detections) {
              const match = faceMatcher.findBestMatch(d.descriptor);
              if (match.label !== 'unknown') { isMatch = true; break; }
           }
-
-          if (isMatch) {
-            setMatches(prev => [...prev, file.id]);
-          }
-        } catch (err) {
-          // console.log("Gagal scan:", file.name);
-        }
+          if (isMatch) setMatches(prev => [...prev, file.id]);
+        } catch (err) { /* ignore */ }
       }));
 
       processed += batch.length;
       setScanCount(processed);
       setScanProgress(Math.round((processed / currentFiles.length) * 100));
-      
-      // Istirahat sejenak agar browser tidak hang
       await new Promise(r => setTimeout(r, 50));
     }
     
@@ -281,7 +332,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
 
     const tempUrl = URL.createObjectURL(file);
     setCapturedFaceImg(tempUrl);
-    setIsScanning(true); // Dummy status
+    setIsScanning(true);
 
     try {
       await loadFaceApiScript();
@@ -293,8 +344,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
       ]);
 
       const img = await window.faceapi.bufferToImage(file);
-      const detection = await window.faceapi.detectSingleFace(img, new window.faceapi.TinyFaceDetectorOptions())
-                                     .withFaceLandmarks().withFaceDescriptor();
+      const detection = await window.faceapi.detectSingleFace(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
       
       if (detection) {
         setUserDescriptor(detection.descriptor);
