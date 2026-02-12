@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   Play,
   Pause,
-  StopCircle,
   Square,
   CheckSquare
 } from 'lucide-react';
@@ -50,25 +49,35 @@ const useLongPress = (callback = () => {}, ms = 500) => {
   };
 };
 
-// --- HELPER COMPONENT: CAMERA MODAL (DIPULIHKAN) ---
+// --- HELPER COMPONENT: CAMERA MODAL (PERBAIKAN LOAD MODEL) ---
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [loadingError, setLoadingError] = useState(null);
 
   useEffect(() => {
     const loadModels = async () => {
        try {
-         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+         // MENGGUNAKAN CDN YANG LEBIH CEPAT & STABIL
+         const MODEL_URL = 'https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights';
+         
+         await Promise.all([
+           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+           faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+         ]);
+         
          setModelLoaded(true);
        } catch (e) {
          console.error("Gagal load model AI", e);
+         setLoadingError("Gagal memuat AI Wajah. Cek koneksi internet.");
        }
     };
-    loadModels();
-  }, []);
+    
+    if (isOpen) {
+      loadModels();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     let stream = null;
@@ -77,7 +86,8 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
         .then(s => {
           stream = s;
           if (videoRef.current) videoRef.current.srcObject = stream;
-        });
+        })
+        .catch(err => setLoadingError("Kamera tidak dapat diakses."));
     }
     return () => {
       if (stream) stream.getTracks().forEach(track => track.stop());
@@ -102,11 +112,11 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
           const dataUrl = canvas.toDataURL('image/jpeg');
           onCapture(dataUrl, detection.descriptor);
         } else {
-          alert("Wajah tidak terdeteksi. Pastikan pencahayaan cukup.");
+          alert("Wajah tidak terdeteksi. Pastikan pencahayaan cukup dan wajah terlihat jelas.");
         }
       } catch (err) {
         console.error(err);
-        alert("Error deteksi wajah. Pastikan library face-api dimuat.");
+        alert("Error deteksi wajah.");
       }
     }
   };
@@ -118,14 +128,27 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
       <div className="bg-white rounded-xl overflow-hidden max-w-lg w-full flex flex-col shadow-2xl">
         <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
           <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform -scale-x-100" />
-          {!modelLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white gap-2">
-               <Loader2 className="animate-spin"/> Menyiapkan AI...
+          
+          {/* Status Loading / Error */}
+          {!modelLoaded && !loadingError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white gap-3">
+               <Loader2 className="w-8 h-8 animate-spin text-blue-400"/> 
+               <span className="text-sm font-medium">Menyiapkan AI Wajah...</span>
             </div>
           )}
+          
+          {loadingError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-red-400 text-center p-4 gap-2">
+               <AlertCircle className="w-8 h-8"/> 
+               <span className="text-sm">{loadingError}</span>
+               <button onClick={onClose} className="mt-2 px-4 py-1 bg-white text-black rounded-full text-xs">Tutup</button>
+            </div>
+          )}
+
           <div className="absolute inset-0 m-12 border-2 border-dashed border-white/50 rounded-full pointer-events-none"></div>
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"><X className="w-5 h-5"/></button>
         </div>
+        
         <div className="p-4 flex justify-center bg-white border-t">
           <button 
             onClick={handleCapture}
@@ -154,7 +177,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
 
-  // Face Search State (DIPULIHKAN)
+  // Face Search State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [userDescriptor, setUserDescriptor] = useState(null);
   const [capturedFaceImg, setCapturedFaceImg] = useState(null);
@@ -165,16 +188,22 @@ const DriveGalleryApp = ({ gasUrl }) => {
   
   const stopScanRef = useRef(false);
 
-  // --- LOGIC FETCH DATA (PERBAIKAN URL) ---
+  // --- LOGIC FETCH DATA ---
   const fetchData = useCallback(async (folderId) => {
     setIsLoading(true);
     try {
-      // PERBAIKAN: Gunakan URL Object agar parameter folderId tertimpa dengan benar
-      // Jika gasUrl sudah mengandung ?folderId=root, kita harus menggantinya, bukan menambah di belakang
       const urlObj = new URL(gasUrl);
       urlObj.searchParams.set('folderId', folderId);
+      // Tambahkan parameter recursive jika ada (opsional, bisa diatur di backend defaultnya)
       
       const res = await fetch(urlObj.toString());
+      const contentType = res.headers.get("content-type");
+      
+      // Cek apakah response HTML (Error dari GAS) atau JSON
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server mengembalikan HTML, bukan JSON. Cek deployment GAS Anda.");
+      }
+
       const data = await res.json();
       
       if (data.error) throw new Error(data.error);
@@ -183,12 +212,11 @@ const DriveGalleryApp = ({ gasUrl }) => {
       if (data.folders) setSubFolders(data.folders);
       else setSubFolders([]);
 
-      // Reset Search saat pindah folder
       resetSearch();
 
     } catch (e) {
       console.error(e);
-      alert("Gagal memuat data. Pastikan URL Script benar.");
+      alert("Gagal memuat data: " + e.message);
     } finally {
       setIsLoading(false);
     }
@@ -315,7 +343,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setSelectedIds([]);
   };
 
-  // Filter tampilan berdasarkan hasil search (jika ada)
   const displayedFiles = userDescriptor 
     ? currentFiles.filter(f => matches.includes(f.id))
     : currentFiles;
@@ -345,7 +372,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
             </h1>
           </div>
           
-          {/* Action Buttons di Navbar */}
           <div className="flex gap-2 items-center">
              {!capturedFaceImg && (
                 <>
@@ -371,7 +397,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
           </div>
         </div>
 
-        {/* STATUS BAR PENCARIAN (Muncul saat ada hasil scan) */}
         {capturedFaceImg && (
            <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 flex items-center gap-3">
               <img src={capturedFaceImg} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" />
@@ -401,7 +426,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
            </div>
         )}
 
-        {/* TAB SUB-FOLDER */}
         {subFolders.length > 0 && !capturedFaceImg && (
           <div className="px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-gray-50 border-b border-gray-200">
             {subFolders.map(folder => (
@@ -418,7 +442,6 @@ const DriveGalleryApp = ({ gasUrl }) => {
         )}
       </div>
 
-      {/* SELECTION BAR INFO */}
       {isSelectionMode && !capturedFaceImg && (
         <div className="sticky top-[110px] z-30 bg-blue-600 text-white px-4 py-2 flex justify-between items-center text-sm font-medium shadow-md animate-in slide-in-from-top-2">
           <span>{selectedIds.length} foto dipilih</span>
@@ -451,12 +474,11 @@ const DriveGalleryApp = ({ gasUrl }) => {
         
         {!isLoading && displayedFiles.length === 0 && (
           <div className="text-center py-20 text-gray-400">
-            {userDescriptor ? "Wajah tidak ditemukan di folder ini." : "Folder ini kosong."}
+            {userDescriptor ? "Wajah tidak ditemukan." : "Folder ini kosong."}
           </div>
         )}
       </main>
 
-      {/* FLOATING DOWNLOAD BUTTON */}
       {isSelectionMode && selectedIds.length > 0 && (
         <button
           onClick={handleBatchDownload}
@@ -491,11 +513,10 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick, isM
           alt={file.name}
           className="w-full h-full object-cover"
           loading="lazy"
-          crossOrigin="anonymous" // PENTING UNTUK FACE API
+          crossOrigin="anonymous" 
           referrerPolicy="no-referrer"
         />
         
-        {/* Overlay Selection */}
         {isSelectionMode && (
           <div className={`absolute inset-0 transition-colors ${isSelected ? 'bg-black/20' : 'bg-transparent'}`}>
             <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -506,7 +527,6 @@ const GridItem = ({ file, isSelectionMode, isSelected, onLongPress, onClick, isM
           </div>
         )}
 
-        {/* Indikator Match AI */}
         {isMatch && (
            <div className="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm font-bold animate-pulse">
               MATCH
