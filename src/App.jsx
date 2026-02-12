@@ -8,14 +8,15 @@ import {
   FolderOpen,
   Camera,
   Search,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2,
+  Square,
+  CheckSquare
 } from 'lucide-react';
 
 // ==========================================
 // KONFIGURASI DAN SCOPE
 // ==========================================
-// Aplikasi akan membaca ClientID/APIKey dari URL Browser
-// Scope: Read Only (Hanya baca file)
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"];
 
@@ -63,7 +64,6 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
         <div className="relative bg-black aspect-video flex items-center justify-center overflow-hidden">
           <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform -scale-x-100" />
           <canvas ref={canvasRef} className="hidden" />
-          {/* Panduan Wajah */}
           <div className="absolute inset-0 m-12 border-2 border-dashed border-white/50 rounded-full pointer-events-none"></div>
           <div className="absolute bottom-4 text-white/80 text-xs text-center w-full">Posisikan wajah di tengah</div>
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full hover:bg-black/70"><X className="w-5 h-5"/></button>
@@ -87,15 +87,19 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSearchingFace, setIsSearchingFace] = useState(false);
+  
+  // STATE BARU UNTUK BATCH DOWNLOAD
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const handleFaceCapture = (imageUrl) => {
     setIsCameraOpen(false);
     setCapturedFace(imageUrl);
     setIsSearchingFace(true);
+    // Matikan mode seleksi saat scan wajah
+    setIsSelectionMode(false);
+    setSelectedIds([]);
 
-    // SIMULASI AI:
-    // Karena memproses ribuan foto Drive secara real-time di browser sangat berat,
-    // kita gunakan simulasi "Searching" untuk UX yang baik.
     setTimeout(() => {
       setIsSearchingFace(false);
     }, 2000);
@@ -106,17 +110,53 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
   };
 
   const handleDownload = (e, url) => {
-    e.stopPropagation();
+    if(e) e.stopPropagation();
     if (url) window.open(url, '_blank');
   };
 
-  // Filter Logic (Simulasi hasil pencarian wajah)
+  // --- LOGIC BATCH DOWNLOAD ---
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedIds([]); // Reset saat mode berubah
+  };
+
+  const toggleSelectPhoto = (e, photoId) => {
+    e.stopPropagation();
+    if (selectedIds.includes(photoId)) {
+      setSelectedIds(prev => prev.filter(id => id !== photoId));
+    } else {
+      setSelectedIds(prev => [...prev, photoId]);
+    }
+  };
+
+  const handleBatchDownload = () => {
+    if (selectedIds.length === 0) return;
+    
+    alert(`Akan mendownload ${selectedIds.length} foto. Izinkan pop-up jika browser memblokir.`);
+
+    // Loop download dengan delay agar browser tidak crash/blokir
+    selectedIds.forEach((id, index) => {
+      const file = driveFiles.find(f => f.id === id);
+      if (file && file.webContentLink) {
+        setTimeout(() => {
+          window.open(file.webContentLink, '_blank');
+        }, index * 800); // Jeda 800ms per file
+      }
+    });
+    
+    // Keluar mode seleksi setelah download dimulai
+    setTimeout(() => {
+      setIsSelectionMode(false);
+      setSelectedIds([]);
+    }, 1000);
+  };
+
   const displayedFiles = capturedFace && !isSearchingFace 
-    ? driveFiles.filter((_, i) => i % 2 === 0) // Tampilkan sebagian foto sebagai "hasil"
+    ? driveFiles.filter((_, i) => i % 2 === 0)
     : driveFiles;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-24">
       {isCameraOpen && (
         <CameraModal 
           isOpen={isCameraOpen} 
@@ -135,7 +175,7 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
             <span className="text-lg font-bold text-gray-700 hidden sm:inline">Drive Gallery</span>
           </div>
 
-          <div className="flex-1 max-w-xl flex justify-center">
+          <div className="flex-1 max-w-xl flex justify-center gap-2">
             {capturedFace ? (
               <div className="flex items-center gap-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-200 animate-in fade-in slide-in-from-top-2 shadow-sm">
                 <img src={capturedFace} alt="Captured" className="w-8 h-8 rounded-full object-cover border border-blue-500" />
@@ -150,13 +190,29 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setIsCameraOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-white hover:shadow-md text-gray-600 rounded-full transition-all border border-transparent hover:border-gray-200"
-              >
-                <Camera className="w-5 h-5 text-gray-500" />
-                <span className="text-sm font-medium">Cari Wajah</span>
-              </button>
+              <>
+                 {/* Tombol Kamera */}
+                <button
+                  onClick={() => setIsCameraOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-white hover:shadow-md text-gray-600 rounded-full transition-all border border-transparent hover:border-gray-200"
+                >
+                  <Camera className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm font-medium hidden sm:inline">Scan Wajah</span>
+                </button>
+
+                {/* Tombol Toggle Select */}
+                <button
+                  onClick={toggleSelectionMode}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all border ${
+                    isSelectionMode 
+                      ? 'bg-blue-100 border-blue-300 text-blue-700' 
+                      : 'bg-gray-100 border-transparent text-gray-600 hover:bg-white hover:shadow-md'
+                  }`}
+                >
+                  {isSelectionMode ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                  <span className="text-sm font-medium hidden sm:inline">{isSelectionMode ? 'Batal Pilih' : 'Pilih Foto'}</span>
+                </button>
+              </>
             )}
           </div>
 
@@ -200,38 +256,79 @@ const DriveGalleryApp = ({ user, onLogout, driveFiles, isLoadingDrive, folderId 
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {displayedFiles.map((photo) => (
-                  <div 
-                    key={photo.id}
-                    className="group relative aspect-[4/5] bg-gray-200 rounded-lg overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all"
-                    onClick={() => setSelectedPhoto(photo)}
-                  >
-                    <img 
-                      src={photo.thumbnailLink} 
-                      alt={photo.name}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      referrerPolicy="no-referrer"
-                    />
-                    
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
-                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all">
-                      <p className="text-white text-xs truncate">{photo.name}</p>
-                    </div>
-                    
-                    <button 
-                      onClick={(e) => handleDownload(e, photo.webContentLink)}
-                      className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white shadow-sm"
+                {displayedFiles.map((photo) => {
+                  const isSelected = selectedIds.includes(photo.id);
+                  return (
+                    <div 
+                      key={photo.id}
+                      className={`group relative aspect-[4/5] bg-gray-200 rounded-lg overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all ${
+                        isSelected ? 'ring-4 ring-blue-500' : ''
+                      }`}
+                      onClick={(e) => {
+                        if (isSelectionMode) toggleSelectPhoto(e, photo.id);
+                        else setSelectedPhoto(photo);
+                      }}
                     >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                      <img 
+                        src={photo.thumbnailLink} 
+                        alt={photo.name}
+                        loading="lazy"
+                        className={`w-full h-full object-cover transition-transform duration-500 ${!isSelectionMode && 'group-hover:scale-110'}`}
+                        referrerPolicy="no-referrer"
+                      />
+                      
+                      {/* Overlay Gelap */}
+                      <div className={`absolute inset-0 bg-black/0 transition-all ${isSelectionMode ? 'hover:bg-black/10' : 'group-hover:bg-black/20'}`} />
+                      
+                      {/* CHECKBOX SELECTION MODE */}
+                      {isSelectionMode && (
+                        <div className="absolute top-2 left-2 z-20">
+                          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                            isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white/50 border-white hover:bg-white'
+                          }`}>
+                            {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Info Text */}
+                      <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all">
+                        <p className="text-white text-xs truncate">{photo.name}</p>
+                      </div>
+                      
+                      {/* Single Download Button (Only visible if NOT in selection mode) */}
+                      {!isSelectionMode && (
+                        <button 
+                          onClick={(e) => handleDownload(e, photo.webContentLink)}
+                          className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-600 hover:text-white shadow-sm"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* FLOATING ACTION BAR UNTUK DOWNLOAD MASAL */}
+      {isSelectionMode && selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 animate-in slide-in-from-bottom-4">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4">
+             <span className="text-sm font-medium">{selectedIds.length} foto dipilih</span>
+             <div className="h-4 w-px bg-gray-700"></div>
+             <button 
+                onClick={handleBatchDownload}
+                className="flex items-center gap-2 text-blue-400 hover:text-blue-300 font-bold transition-colors"
+             >
+                <Download className="w-5 h-5" /> Download Masal
+             </button>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Modal */}
       {selectedPhoto && (
@@ -273,31 +370,35 @@ export default function App() {
   const [isLoadingDrive, setIsLoadingDrive] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Konfigurasi dari URL
   const [config, setConfig] = useState({ clientId: '', apiKey: '', folderId: 'root' });
 
   useEffect(() => {
-    // Membaca URL Query Strings: ?clientId=...&apiKey=...
     const params = new URLSearchParams(window.location.search);
+    const encryptedData = params.get('data');
+    if (encryptedData) {
+      try {
+        const decoded = atob(encryptedData);
+        const parsed = JSON.parse(decoded);
+        if (parsed.c && parsed.k) {
+          setConfig({ clientId: parsed.c, apiKey: parsed.k, folderId: parsed.f || 'root' });
+          return;
+        }
+      } catch (e) {
+        console.error("Gagal membaca link terenkripsi", e);
+      }
+    }
     const clientId = params.get('clientId');
     const apiKey = params.get('apiKey');
     const folderId = params.get('folderId') || 'root';
-
-    if (clientId && apiKey) {
-      setConfig({ clientId, apiKey, folderId });
-    }
+    if (clientId && apiKey) setConfig({ clientId, apiKey, folderId });
   }, []);
 
-  // 1. Load Google API
   useEffect(() => {
     if (!config.clientId || !config.apiKey) return;
-
     const loadGapi = () => {
       const script = document.createElement('script');
       script.src = "https://apis.google.com/js/api.js";
-      script.onload = () => {
-        window.gapi.load('client:auth2', initClient);
-      };
+      script.onload = () => { window.gapi.load('client:auth2', initClient); };
       document.body.appendChild(script);
     };
     loadGapi();
@@ -316,18 +417,13 @@ export default function App() {
       updateSigninStatus(authInstance.isSignedIn.get());
     }, (error) => {
       setErrorMsg("Gagal inisialisasi. Cek Client ID/API Key.");
-      console.error(error);
     });
   };
 
   const updateSigninStatus = (isSignedIn) => {
     if (isSignedIn) {
       const profile = window.gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile();
-      setUser({
-        name: profile.getName(),
-        email: profile.getEmail(),
-        avatar: profile.getImageUrl(),
-      });
+      setUser({ name: profile.getName(), email: profile.getEmail(), avatar: profile.getImageUrl() });
       listFiles();
     } else {
       setUser(null);
@@ -338,9 +434,7 @@ export default function App() {
   const listFiles = () => {
     setIsLoadingDrive(true);
     let query = "mimeType contains 'image/' and trashed = false";
-    if (config.folderId && config.folderId !== 'root') {
-      query += ` and '${config.folderId}' in parents`;
-    }
+    if (config.folderId && config.folderId !== 'root') query += ` and '${config.folderId}' in parents`;
 
     window.gapi.client.drive.files.list({
       'pageSize': 100,
@@ -349,20 +443,16 @@ export default function App() {
     }).then((response) => {
       const files = response.result.files;
       if (files && files.length > 0) {
-        // Trik: Ubah ukuran thumbnailLink agar lebih besar (s400)
         const enhancedFiles = files.map(f => ({
             ...f,
             thumbnailLink: f.thumbnailLink ? f.thumbnailLink.replace('=s220', '=s400') : null
         }));
         setDriveFiles(enhancedFiles);
-      } else {
-        setDriveFiles([]);
-      }
+      } else setDriveFiles([]);
       setIsLoadingDrive(false);
     });
   };
 
-  // Tampilan belum setup
   if (!config.clientId || !config.apiKey) {
      return (
        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
@@ -371,19 +461,13 @@ export default function App() {
                 <AlertCircle className="w-8 h-8 text-yellow-600" />
             </div>
             <h1 className="text-xl font-bold text-gray-800 mb-2">Setup Diperlukan</h1>
-            <p className="text-gray-600 mb-6 text-sm">
-               Aplikasi membutuhkan <b>Client ID</b> dan <b>API Key</b>.
-               <br/>Gunakan <i>Generator Link</i> yang sudah kita buat sebelumnya.
-            </p>
-            <a href="/generator.html" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors">
-               Buka Generator Link
-            </a>
+            <p className="text-gray-600 mb-6 text-sm">Gunakan <i>Generator Link</i> untuk membuat link akses.</p>
+            <a href="/generator.html" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition-colors">Buka Generator Link</a>
          </div>
        </div>
      )
   }
 
-  // Tampilan Login
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
