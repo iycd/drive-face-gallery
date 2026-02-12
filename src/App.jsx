@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   User,
   Zap,
-  ScanFace // Icon baru
+  ScanFace,
+  Terminal // Icon baru untuk Log
 } from 'lucide-react';
 
 // ==========================================
@@ -62,7 +63,6 @@ const useLongPress = (callback = () => {}, ms = 500) => {
 // ==========================================
 const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null); // Canvas untuk gambar kotak wajah
   const [modelLoaded, setModelLoaded] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
@@ -119,11 +119,10 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
 
         if (result) {
           setFaceDetected(true);
-          // (Opsional) Bisa gambar kotak di sini jika mau
         } else {
           setFaceDetected(false);
         }
-      }, 500); // Cek setiap 0.5 detik
+      }, 500); 
     }
     return () => clearInterval(interval);
   }, [cameraReady, modelLoaded]);
@@ -140,7 +139,6 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
     ctx.drawImage(videoEl, 0, 0);
     
     try {
-      // Gunakan resolusi lebih tinggi untuk capture akhir
       const detection = await window.faceapi.detectSingleFace(canvas, new window.faceapi.TinyFaceDetectorOptions({ inputSize: 512 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
@@ -167,14 +165,12 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
           
           <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover transform -scale-x-100 ${cameraReady ? 'opacity-100' : 'opacity-0'}`} />
           
-          {/* Indikator Loading Awal */}
           {cameraReady && !modelLoaded && !errorMsg && (
             <div className="absolute top-4 bg-black/60 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md z-10 flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin"/> Menyiapkan AI...
             </div>
           )}
 
-          {/* Indikator Wajah Terdeteksi */}
           {modelLoaded && (
              <div className={`absolute top-4 px-4 py-2 rounded-full text-white text-xs backdrop-blur-md z-10 font-bold flex items-center gap-2 transition-all ${faceDetected ? 'bg-green-500/80' : 'bg-red-500/60'}`}>
                 {faceDetected ? <CheckCircle2 className="w-4 h-4"/> : <ScanFace className="w-4 h-4"/>}
@@ -182,7 +178,6 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
              </div>
           )}
 
-          {/* Frame Guide */}
           <div className={`absolute inset-0 m-[15%] border-4 border-dashed rounded-[30px] pointer-events-none transition-colors duration-300 ${faceDetected ? 'border-green-400' : 'border-white/30'}`}></div>
           
           <button onClick={onClose} className="absolute top-4 right-4 bg-black/40 text-white p-2 rounded-full z-30"><X className="w-6 h-6"/></button>
@@ -241,12 +236,25 @@ const DriveGalleryApp = ({ gasUrl }) => {
   const [scanProgress, setScanProgress] = useState(0);
   const [scanCount, setScanCount] = useState(0);
   
+  // LOGGING SYSTEM
+  const [scanLogs, setScanLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(true);
+  
   const stopScanRef = useRef(false);
   const fileInputRef = useRef(null);
+
+  // --- LOGGING HELPER ---
+  const addLog = (message, type = 'info') => {
+    setScanLogs(prev => {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return [`[${time}] ${message}`, ...prev].slice(0, 100); // Simpan 100 log terakhir
+    });
+  };
 
   // --- FETCH DATA ---
   const fetchData = useCallback(async (folderId) => {
     setIsLoading(true);
+    addLog(`Mengambil data folder...`, 'info');
     try {
       const urlObj = new URL(gasUrl);
       urlObj.searchParams.set('folderId', folderId);
@@ -260,9 +268,10 @@ const DriveGalleryApp = ({ gasUrl }) => {
       if (data.folders) setSubFolders(data.folders);
       else setSubFolders([]);
 
+      addLog(`Berhasil memuat ${data.files?.length || 0} file.`, 'success');
       resetSearch();
     } catch (e) {
-      // Silent error
+      addLog(`Error Fetch: ${e.message}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -281,6 +290,8 @@ const DriveGalleryApp = ({ gasUrl }) => {
     if (!window.faceapi) await loadFaceApiScript();
 
     setIsScanning(true);
+    setScanLogs([]); // Reset log saat mulai scan baru
+    addLog("Memulai pemindaian wajah...", 'info');
     stopScanRef.current = false;
     
     const faceMatcher = new window.faceapi.FaceMatcher(userDescriptor, 0.55);
@@ -288,24 +299,33 @@ const DriveGalleryApp = ({ gasUrl }) => {
     let processed = 0;
 
     for (let i = 0; i < currentFiles.length; i += BATCH_SIZE) {
-      if (stopScanRef.current) break;
+      if (stopScanRef.current) {
+        addLog("Pemindaian dihentikan pengguna.", 'warning');
+        break;
+      }
 
       const batch = currentFiles.slice(i, i + BATCH_SIZE);
       
       await Promise.all(batch.map(async (file) => {
         try {
-          // PROXY: Bypass CORS Google Drive
+          // addLog(`Memindai: ${file.name}`, 'debug'); // Optional: Terlalu berisik kalau semua dilog
           const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(file.thumbnail);
           const img = await window.faceapi.fetchImage(proxyUrl);
-          const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+          const detections = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
 
           let isMatch = false;
           for (const d of detections) {
              const match = faceMatcher.findBestMatch(d.descriptor);
              if (match.label !== 'unknown') { isMatch = true; break; }
           }
-          if (isMatch) setMatches(prev => [...prev, file.id]);
-        } catch (err) { /* ignore */ }
+
+          if (isMatch) {
+            setMatches(prev => [...prev, file.id]);
+            addLog(`MATCH DITEMUKAN: ${file.name}`, 'success');
+          }
+        } catch (err) {
+          addLog(`Error memindai ${file.name}: ${err.message || 'CORS/Network'}`, 'error');
+        }
       }));
 
       processed += batch.length;
@@ -315,6 +335,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     }
     
     setIsScanning(false);
+    addLog(`Selesai. Total ${matches.length} wajah cocok ditemukan.`, 'info');
   };
 
   // --- HANDLERS ---
@@ -323,6 +344,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     setUserDescriptor(descriptor);
     setMatches([]);
     setIsCameraOpen(false);
+    addLog("Wajah referensi ditangkap. Memulai scan...", 'info');
     setTimeout(startScanning, 500);
   };
 
@@ -333,6 +355,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
     const tempUrl = URL.createObjectURL(file);
     setCapturedFaceImg(tempUrl);
     setIsScanning(true);
+    addLog("Mengupload foto referensi...", 'info');
 
     try {
       await loadFaceApiScript();
@@ -349,13 +372,15 @@ const DriveGalleryApp = ({ gasUrl }) => {
       if (detection) {
         setUserDescriptor(detection.descriptor);
         setMatches([]);
+        addLog("Wajah referensi valid. Memulai scan...", 'success');
         setTimeout(startScanning, 500);
       } else {
         alert("Wajah tidak ditemukan di foto upload.");
+        addLog("Gagal: Wajah tidak terdeteksi di foto upload.", 'error');
         resetSearch();
       }
     } catch (err) {
-      alert("Gagal memproses foto.");
+      addLog(`Gagal memproses foto: ${err.message}`, 'error');
       resetSearch();
     }
   };
@@ -391,10 +416,11 @@ const DriveGalleryApp = ({ gasUrl }) => {
   const displayedFiles = userDescriptor ? currentFiles.filter(f => matches.includes(f.id)) : currentFiles;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 font-sans select-none">
+    <div className="min-h-screen bg-gray-50 pb-40 font-sans select-none relative">
       {isCameraOpen && <CameraModal isOpen={true} onClose={() => setIsCameraOpen(false)} onCapture={handleCapture} />}
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleUploadPhoto} />
 
+      {/* HEADER & CONTROLS */}
       <div className="sticky top-0 z-40 bg-white shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
           <div className="flex items-center gap-2 overflow-hidden flex-1">
@@ -461,6 +487,7 @@ const DriveGalleryApp = ({ gasUrl }) => {
         </div>
       )}
 
+      {/* GRID FILES */}
       <main className="p-2 sm:p-4">
         {isLoading && currentFiles.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-gray-400"><Loader2 className="w-8 h-8 animate-spin mb-2" /><p>Memuat...</p></div>
@@ -487,12 +514,46 @@ const DriveGalleryApp = ({ gasUrl }) => {
         )}
       </main>
 
-      {isSelectionMode && selectedIds.length > 0 && (
-        <button onClick={handleBatchDownload} className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 z-50">
-          <Download className="w-7 h-7" />
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">{selectedIds.length}</span>
-        </button>
+      {/* FLOATING ACTION BUTTONS */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+         {/* Toggle Log Button */}
+         <button 
+            onClick={() => setShowLogs(!showLogs)} 
+            className="w-12 h-12 bg-gray-800 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-700 transition-all"
+            title="Toggle Log"
+         >
+            <Terminal className="w-5 h-5"/>
+         </button>
+
+         {/* Batch Download Button */}
+         {isSelectionMode && selectedIds.length > 0 && (
+          <button onClick={handleBatchDownload} className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-110 active:scale-95">
+            <Download className="w-7 h-7" />
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white">{selectedIds.length}</span>
+          </button>
+        )}
+      </div>
+
+      {/* SCAN LOG PANEL */}
+      {showLogs && (scanLogs.length > 0) && (
+        <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 text-gray-300 p-0 h-40 z-40 border-t border-gray-700 backdrop-blur-sm transition-transform duration-300 ease-in-out font-mono text-xs flex flex-col shadow-2xl">
+           <div className="flex justify-between items-center px-4 py-2 bg-black/40 border-b border-gray-700">
+              <span className="font-bold text-gray-400 flex items-center gap-2">
+                 <Terminal className="w-3 h-3"/> Log Aktivitas ({scanLogs.length})
+              </span>
+              <button onClick={() => setScanLogs([])} className="text-xs hover:text-white px-2 py-1 bg-gray-800 rounded">Bersihkan</button>
+           </div>
+           <div className="flex-1 overflow-y-auto p-4 space-y-1">
+              {scanLogs.length === 0 && <p className="text-gray-600 italic">Belum ada aktivitas.</p>}
+              {scanLogs.map((log, idx) => (
+                 <div key={idx} className={`break-words ${log.includes('MATCH') ? 'text-green-400 font-bold bg-green-900/20 p-1 rounded' : log.includes('Error') ? 'text-red-400 bg-red-900/20 p-1 rounded' : ''}`}>
+                    {log}
+                 </div>
+              ))}
+           </div>
+        </div>
       )}
+
     </div>
   );
 };
