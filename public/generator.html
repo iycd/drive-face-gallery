@@ -1,193 +1,104 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Gallery Indexer & Link Generator</title>
+    <title>AI Indexer System</title>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-slate-900 text-white font-sans p-4 sm:p-8">
-    <div class="max-w-2xl mx-auto space-y-6">
-        
-        <!-- BAGIAN 1: INDEXER & SYNC -->
-        <div class="bg-slate-800 p-6 rounded-3xl shadow-2xl border border-slate-700">
-            <h1 class="text-2xl font-black mb-2 text-indigo-400 uppercase tracking-tighter flex items-center gap-3">
-                <i class="fa-solid fa-brain"></i> AI Indexer System
-            </h1>
-            <p class="text-slate-400 text-sm mb-6">Lakukan sinkronisasi wajah ke database cloud agar pencarian di galeri menjadi instan.</p>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Google Apps Script URL</label>
-                    <input id="scriptUrl" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="https://script.google.com/.../exec">
-                </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Folder ID</label>
-                    <input id="folderId" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="root">
-                </div>
-                
-                <div id="statusBox" class="hidden bg-slate-900 p-4 rounded-xl border border-indigo-500/30">
-                    <div class="flex justify-between items-end mb-2">
-                        <span id="statusText" class="text-[10px] font-bold text-indigo-400 uppercase">Menunggu...</span>
-                        <span id="percentText" class="text-xl font-black">0%</span>
-                    </div>
-                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                        <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
-                    </div>
-                    <p id="logText" class="text-[9px] font-mono text-slate-500 mt-2 truncate"></p>
-                </div>
-
-                <button id="startIndexBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 p-4 rounded-2xl font-black text-sm transition-all shadow-lg shadow-indigo-500/20 active:scale-95">
-                    SINKRONISASI SEKARANG (GENERATE DB)
-                </button>
+<body class="bg-slate-950 text-white font-sans p-8">
+    <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl">
+        <div class="flex items-center gap-4 mb-8">
+            <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <i class="fa-solid fa-microchip text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black uppercase tracking-tighter italic">Biometric Indexer</h1>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">Admin Control Panel</p>
             </div>
         </div>
 
-        <!-- BAGIAN 2: LINK GENERATOR -->
-        <div class="bg-slate-800 p-6 rounded-3xl shadow-2xl border border-slate-700">
-            <h2 class="text-xl font-black mb-4 text-purple-400 uppercase tracking-tighter flex items-center gap-3">
-                <i class="fa-solid fa-link"></i> App Link Generator
-            </h2>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Alamat Aplikasi (Vercel/Localhost)</label>
-                    <input id="baseUrl" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm outline-none focus:ring-2 focus:ring-purple-500" placeholder="https://app-anda.vercel.app">
-                </div>
-
-                <div class="bg-slate-900 p-4 rounded-2xl border border-slate-700">
-                    <label class="block text-[10px] font-bold text-purple-400 uppercase mb-2">Link Galeri Anda (Terenkripsi)</label>
-                    <div class="flex gap-2">
-                        <input id="resultLink" type="text" readonly class="flex-1 bg-slate-800 border border-slate-700 p-2 rounded-lg text-[10px] font-mono text-purple-300 outline-none" placeholder="Isi data di atas untuk membuat link...">
-                        <button onclick="copyLink()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
-                            <i class="fa-regular fa-copy"></i> Copy
-                        </button>
-                    </div>
-                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-black py-3 rounded-xl transition-all text-sm shadow-lg shadow-purple-500/20 active:scale-95">
-                        BUKA GALERI <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
-                    </a>
-                </div>
+        <div class="space-y-6">
+            <div class="grid gap-4">
+                <input id="scriptUrl" type="text" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="URL Web App Google Script">
+                <input id="folderId" type="text" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="ID Folder Drive (Subfolder akan ikut discan)">
             </div>
-        </div>
 
-        <p class="text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest">
-            AI Biometric Indexer v2.0 • Secure Base64 Encoding
-        </p>
+            <div id="statusBox" class="hidden bg-black/40 p-6 rounded-3xl border border-indigo-500/20 animate-in zoom-in-95">
+                <div class="flex justify-between items-end mb-3">
+                    <span id="statusText" class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Inisialisasi...</span>
+                    <span id="percentText" class="text-2xl font-black italic">0%</span>
+                </div>
+                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden shadow-inner">
+                    <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
+                </div>
+                <p id="logText" class="text-[9px] font-mono text-slate-500 mt-3 truncate opacity-60 italic"></p>
+            </div>
+
+            <button id="syncBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 p-5 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/10 transition-all active:scale-95">
+                SINKRONISASI DATABASE AI
+            </button>
+        </div>
     </div>
 
     <script>
-        let modelsLoaded = false;
-
-        // Inisialisasi data saat halaman dibuka
-        window.onload = function() {
-            const currentOrigin = window.location.origin;
-            document.getElementById('baseUrl').value = (currentOrigin.includes('null') || currentOrigin.startsWith('file')) 
-                ? "http://localhost:5173" 
-                : currentOrigin;
-            
-            const savedScript = localStorage.getItem('saved_scriptUrl');
-            if(savedScript) {
-                document.getElementById('scriptUrl').value = savedScript;
-                generateLink();
-            }
-        };
-
-        // Fungsi enkripsi dan pembuatan link
-        function generateLink() {
-            const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, ""); 
-            const scriptUrl = document.getElementById('scriptUrl').value.trim();
-            const folderId = document.getElementById('folderId').value.trim() || 'root';
-
-            if(!baseUrl || !scriptUrl) return;
-
-            localStorage.setItem('saved_scriptUrl', scriptUrl);
-
-            // Gabungkan URL Script dengan Folder ID
-            const separator = scriptUrl.includes('?') ? '&' : '?';
-            const finalScriptUrl = `${scriptUrl}${separator}folderId=${folderId}`;
-
-            // Enkripsi Base64
-            const encryptedApiUrl = btoa(finalScriptUrl);
-            const finalLink = `${baseUrl}/?api=${encryptedApiUrl}`;
-
-            document.getElementById('resultLink').value = finalLink;
-            document.getElementById('previewBtn').href = finalLink;
-        }
-
-        function copyLink() {
-            const copyText = document.getElementById("resultLink");
-            if(!copyText.value) return;
-            
-            navigator.clipboard.writeText(copyText.value);
-            const btn = document.querySelector('button[onclick="copyLink()"]');
-            const original = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
-            setTimeout(() => btn.innerHTML = original, 2000);
-        }
+        let isSyncing = false;
 
         async function initAI() {
-            if (modelsLoaded) return;
-            document.getElementById('statusBox').classList.remove('hidden');
-            document.getElementById('statusText').innerText = "Memuat Model AI...";
             const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
             await Promise.all([
                 faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
                 faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
                 faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
             ]);
-            modelsLoaded = true;
         }
 
-        document.getElementById('startIndexBtn').onclick = async () => {
-            const scriptUrl = document.getElementById('scriptUrl').value;
-            const folderId = document.getElementById('folderId').value || 'root';
-            
-            if(!scriptUrl) return alert("Masukkan URL Script!");
+        document.getElementById('syncBtn').onclick = async () => {
+            if(isSyncing) return;
+            const url = document.getElementById('scriptUrl').value;
+            const fid = document.getElementById('folderId').value;
+            if(!url || !fid) return alert("Isi data terlebih dahulu!");
 
-            await initAI();
-            document.getElementById('statusText').innerText = "Membaca Drive...";
-            
+            isSyncing = true;
+            document.getElementById('statusBox').classList.remove('hidden');
+            document.getElementById('syncBtn').innerText = "PROSES SCANNING...";
+            document.getElementById('syncBtn').classList.add('opacity-50');
+
             try {
-                const res = await fetch(`${scriptUrl}?folderId=${folderId}`);
+                await initAI();
+                document.getElementById('statusText').innerText = "Membaca Folder & Subfolder...";
+                const res = await fetch(`${url}?folderId=${fid}`);
                 const data = await res.json();
                 const files = data.files || [];
-                
-                if(files.length === 0) return alert("Tidak ada foto ditemukan.");
 
                 const faceDB = [];
                 for(let i=0; i < files.length; i++) {
-                    const file = files[i];
-                    document.getElementById('logText').innerText = `Scanning: ${file.name}`;
-                    
+                    const f = files[i];
+                    document.getElementById('logText').innerText = `Proses: ${f.name}`;
                     try {
-                        const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(file.full)}&w=500&output=jpg`;
+                        const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(f.full)}&w=600&output=jpg`;
                         const img = await faceapi.fetchImage(imgUrl);
-                        const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
-                        
-                        if(detections.length > 0) {
-                            faceDB.push({
-                                fileId: file.id,
-                                faces: detections.map(d => Array.from(d.descriptor))
-                            });
+                        const dets = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 }))
+                                              .withFaceLandmarks().withFaceDescriptors();
+                        if(dets.length > 0) {
+                            faceDB.push({ fileId: f.id, faces: dets.map(d => Array.from(d.descriptor)) });
                         }
-                    } catch(e) { console.error(e); }
-
+                    } catch(e) { console.warn("Skip file", f.name); }
+                    
                     const p = Math.round(((i+1)/files.length)*100);
                     document.getElementById('progressBar').style.width = p + '%';
                     document.getElementById('percentText').innerText = p + '%';
                 }
 
-                document.getElementById('statusText').innerText = "Menyimpan Database...";
-                await fetch(scriptUrl, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: "saveDB", data: faceDB })
-                });
-
-                document.getElementById('statusText').innerText = "SELESAI!";
-                alert("Database Vektor berhasil dibuat! Link galeri Anda siap digunakan.");
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
+                document.getElementById('statusText').innerText = "Menyimpan ke Cloud...";
+                await fetch(url, { method: 'POST', body: JSON.stringify({ action: "saveDB", data: faceDB }) });
+                
+                alert("DATABASE BERHASIL DISINKRONISASI!");
+            } catch(e) { alert("Error: " + e.message); }
+            
+            isSyncing = false;
+            document.getElementById('syncBtn').innerText = "SINKRONISASI DATABASE AI";
+            document.getElementById('syncBtn').classList.remove('opacity-50');
         };
     </script>
 </body>
