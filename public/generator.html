@@ -1,111 +1,113 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAS Secure Link Generator</title>
+    <title>AI Gallery Indexer & Link Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
-
-    <div class="max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div class="bg-purple-700 px-8 py-6">
-                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
-                    <i class="fa-solid fa-user-secret"></i> Enkripsi Link Galeri
-                </h1>
-                <p class="text-purple-100 mt-2 text-sm">Sembunyikan URL Google Apps Script Anda menjadi kode acak yang aman.</p>
-            </div>
-
-            <div class="p-8 space-y-6">
+<body class="bg-slate-900 text-white font-sans p-4 sm:p-8">
+    <div class="max-w-2xl mx-auto space-y-6">
+        
+        <!-- BAGIAN 1: INDEXER & SYNC -->
+        <div class="bg-slate-800 p-6 rounded-3xl shadow-2xl border border-slate-700">
+            <h1 class="text-2xl font-black mb-2 text-indigo-400 uppercase tracking-tighter flex items-center gap-3">
+                <i class="fa-solid fa-brain"></i> AI Indexer System
+            </h1>
+            <p class="text-slate-400 text-sm mb-6">Lakukan sinkronisasi wajah ke database cloud agar pencarian di galeri menjadi instan.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Google Apps Script URL</label>
+                    <input id="scriptUrl" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="https://script.google.com/.../exec">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Folder ID</label>
+                    <input id="folderId" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="root">
+                </div>
                 
-                <!-- Input Base URL -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Alamat Aplikasi (Vercel)</label>
-                    <input type="text" id="baseUrl" placeholder="https://app-anda.vercel.app" 
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
-                    <p class="text-xs text-gray-400 mt-1">Link aplikasi galeri Anda yang sudah di-deploy.</p>
+                <div id="statusBox" class="hidden bg-slate-900 p-4 rounded-xl border border-indigo-500/30">
+                    <div class="flex justify-between items-end mb-2">
+                        <span id="statusText" class="text-[10px] font-bold text-indigo-400 uppercase">Menunggu...</span>
+                        <span id="percentText" class="text-xl font-black">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                    <p id="logText" class="text-[9px] font-mono text-slate-500 mt-2 truncate"></p>
                 </div>
 
-                <!-- Script URL -->
+                <button id="startIndexBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 p-4 rounded-2xl font-black text-sm transition-all shadow-lg shadow-indigo-500/20 active:scale-95">
+                    SINKRONISASI SEKARANG (GENERATE DB)
+                </button>
+            </div>
+        </div>
+
+        <!-- BAGIAN 2: LINK GENERATOR -->
+        <div class="bg-slate-800 p-6 rounded-3xl shadow-2xl border border-slate-700">
+            <h2 class="text-xl font-black mb-4 text-purple-400 uppercase tracking-tighter flex items-center gap-3">
+                <i class="fa-solid fa-link"></i> App Link Generator
+            </h2>
+            
+            <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">URL Web App (Google Apps Script)</label>
-                    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec" 
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
-                    <p class="text-xs text-gray-400 mt-1">URL Backend JSON Anda.</p>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase">Alamat Aplikasi (Vercel/Localhost)</label>
+                    <input id="baseUrl" type="text" oninput="generateLink()" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl mt-1 text-sm outline-none focus:ring-2 focus:ring-purple-500" placeholder="https://app-anda.vercel.app">
                 </div>
 
-                <!-- Folder ID -->
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Folder ID Google Drive</label>
-                    <input type="text" id="folderId" placeholder="root" 
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 transition-all outline-none">
-                </div>
-
-                <hr class="border-gray-200">
-
-                <!-- Result Section -->
-                <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Link Terenkripsi:</label>
-                    
+                <div class="bg-slate-900 p-4 rounded-2xl border border-slate-700">
+                    <label class="block text-[10px] font-bold text-purple-400 uppercase mb-2">Link Galeri Anda (Terenkripsi)</label>
                     <div class="flex gap-2">
-                        <input type="text" id="resultLink" readonly 
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg text-purple-700 font-mono text-xs focus:outline-none select-all break-all">
-                        
-                        <button onclick="copyLink()" class="bg-gray-800 hover:bg-black text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <input id="resultLink" type="text" readonly class="flex-1 bg-slate-800 border border-slate-700 p-2 rounded-lg text-[10px] font-mono text-purple-300 outline-none" placeholder="Isi data di atas untuk membuat link...">
+                        <button onclick="copyLink()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
                             <i class="fa-regular fa-copy"></i> Copy
                         </button>
                     </div>
-
-                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md">
-                        Buka Galeri <i class="fa-solid fa-arrow-up-right-from-square ml-2"></i>
+                    <a id="previewBtn" href="#" target="_blank" class="mt-4 block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-black py-3 rounded-xl transition-all text-sm shadow-lg shadow-purple-500/20 active:scale-95">
+                        BUKA GALERI <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
                     </a>
                 </div>
-
             </div>
         </div>
-        
-        <p class="text-center text-gray-400 text-xs mt-8">
-            Enkripsi dilakukan lokal (Base64 Encoding) untuk menyamarkan URL asli.
+
+        <p class="text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest">
+            AI Biometric Indexer v2.0 • Secure Base64 Encoding
         </p>
     </div>
 
     <script>
-        const inputs = ['baseUrl', 'scriptUrl', 'folderId'];
-        
+        let modelsLoaded = false;
+
+        // Inisialisasi data saat halaman dibuka
         window.onload = function() {
             const currentOrigin = window.location.origin;
+            document.getElementById('baseUrl').value = (currentOrigin.includes('null') || currentOrigin.startsWith('file')) 
+                ? "http://localhost:5173" 
+                : currentOrigin;
             
-            if (currentOrigin === 'null' || currentOrigin.startsWith('file://')) {
-                 document.getElementById('baseUrl').value = "http://localhost:5173";
-            } else {
-                 document.getElementById('baseUrl').value = currentOrigin;
+            const savedScript = localStorage.getItem('saved_scriptUrl');
+            if(savedScript) {
+                document.getElementById('scriptUrl').value = savedScript;
+                generateLink();
             }
-            
-            if(localStorage.getItem('saved_scriptUrl')) document.getElementById('scriptUrl').value = localStorage.getItem('saved_scriptUrl');
-            
-            generateLink();
         };
 
+        // Fungsi enkripsi dan pembuatan link
         function generateLink() {
             const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, ""); 
-            let scriptUrl = document.getElementById('scriptUrl').value.trim();
+            const scriptUrl = document.getElementById('scriptUrl').value.trim();
             const folderId = document.getElementById('folderId').value.trim() || 'root';
 
             if(!baseUrl || !scriptUrl) return;
 
             localStorage.setItem('saved_scriptUrl', scriptUrl);
 
-            // 1. Gabungkan URL Script dengan Folder ID
+            // Gabungkan URL Script dengan Folder ID
             const separator = scriptUrl.includes('?') ? '&' : '?';
             const finalScriptUrl = `${scriptUrl}${separator}folderId=${folderId}`;
 
-            // 2. ENKRIPSI (Base64)
-            // Ini akan mengubah URL panjang menjadi string acak seperti "aHR0cHM6Ly..."
+            // Enkripsi Base64
             const encryptedApiUrl = btoa(finalScriptUrl);
-
-            // 3. Buat URL Akhir
             const finalLink = `${baseUrl}/?api=${encryptedApiUrl}`;
 
             document.getElementById('resultLink').value = finalLink;
@@ -114,23 +116,79 @@
 
         function copyLink() {
             const copyText = document.getElementById("resultLink");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999); 
-            navigator.clipboard.writeText(copyText.value);
+            if(!copyText.value) return;
             
+            navigator.clipboard.writeText(copyText.value);
             const btn = document.querySelector('button[onclick="copyLink()"]');
-            const originalText = btn.innerHTML;
+            const original = btn.innerHTML;
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
-            btn.classList.replace('bg-gray-800', 'bg-green-600');
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.classList.replace('bg-green-600', 'bg-gray-800');
-            }, 2000);
+            setTimeout(() => btn.innerHTML = original, 2000);
         }
 
-        inputs.forEach(id => {
-            document.getElementById(id).addEventListener('input', generateLink);
-        });
+        async function initAI() {
+            if (modelsLoaded) return;
+            document.getElementById('statusBox').classList.remove('hidden');
+            document.getElementById('statusText').innerText = "Memuat Model AI...";
+            const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
+            modelsLoaded = true;
+        }
+
+        document.getElementById('startIndexBtn').onclick = async () => {
+            const scriptUrl = document.getElementById('scriptUrl').value;
+            const folderId = document.getElementById('folderId').value || 'root';
+            
+            if(!scriptUrl) return alert("Masukkan URL Script!");
+
+            await initAI();
+            document.getElementById('statusText').innerText = "Membaca Drive...";
+            
+            try {
+                const res = await fetch(`${scriptUrl}?folderId=${folderId}`);
+                const data = await res.json();
+                const files = data.files || [];
+                
+                if(files.length === 0) return alert("Tidak ada foto ditemukan.");
+
+                const faceDB = [];
+                for(let i=0; i < files.length; i++) {
+                    const file = files[i];
+                    document.getElementById('logText').innerText = `Scanning: ${file.name}`;
+                    
+                    try {
+                        const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(file.full)}&w=500&output=jpg`;
+                        const img = await faceapi.fetchImage(imgUrl);
+                        const detections = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+                        
+                        if(detections.length > 0) {
+                            faceDB.push({
+                                fileId: file.id,
+                                faces: detections.map(d => Array.from(d.descriptor))
+                            });
+                        }
+                    } catch(e) { console.error(e); }
+
+                    const p = Math.round(((i+1)/files.length)*100);
+                    document.getElementById('progressBar').style.width = p + '%';
+                    document.getElementById('percentText').innerText = p + '%';
+                }
+
+                document.getElementById('statusText').innerText = "Menyimpan Database...";
+                await fetch(scriptUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: "saveDB", data: faceDB })
+                });
+
+                document.getElementById('statusText').innerText = "SELESAI!";
+                alert("Database Vektor berhasil dibuat! Link galeri Anda siap digunakan.");
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        };
     </script>
 </body>
 </html>
