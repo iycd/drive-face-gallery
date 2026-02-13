@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Search, Loader2, RefreshCw, Database, Camera, X, 
-  CheckCircle2, AlertTriangle, Layers, Cpu, User, ChevronLeft
+  CheckCircle2, User, Upload, Image as ImageIcon, ScanFace
 } from "lucide-react";
 
 /* ==========================================
-   1. GLOBAL AI LOADER & HELPERS
+   1. GLOBAL AI LOADER
 ========================================== */
 const loadFaceApi = () =>
   new Promise((resolve) => {
@@ -30,46 +30,59 @@ async function initModels() {
   modelsLoaded = true;
 }
 
-const getAIFriendlyUrl = (file) => {
-  const raw = file.full || `https://drive.google.com/uc?id=${file.id}`;
-  return `https://wsrv.nl/?url=${encodeURIComponent(raw)}&w=600&output=jpg&q=80`;
-};
-
 /* ==========================================
-   2. CAMERA COMPONENT
+   2. CAMERA MODAL COMPONENT
 ========================================== */
-const CameraView = ({ onCapture, onClose }) => {
+const CameraModal = ({ isOpen, onClose, onCapture }) => {
   const videoRef = useRef(null);
   const [ready, setReady] = useState(false);
+  const [isFaceInFrame, setIsFaceInFrame] = useState(false);
 
   useEffect(() => {
+    if (!isOpen) return;
     initModels().then(() => setReady(true));
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       .then(s => { if (videoRef.current) videoRef.current.srcObject = s; });
+
+    // Loop feedback wajah
+    const interval = setInterval(async () => {
+      if (videoRef.current && ready) {
+        const det = await window.faceapi.detectSingleFace(videoRef.current, new window.faceapi.TinyFaceDetectorOptions());
+        setIsFaceInFrame(!!det);
+      }
+    }, 400);
+
     return () => {
+      clearInterval(interval);
       if (videoRef.current?.srcObject) 
         videoRef.current.srcObject.getTracks().forEach(t => t.stop());
     };
-  }, []);
+  }, [isOpen, ready]);
 
   const capture = async () => {
     const det = await window.faceapi.detectSingleFace(videoRef.current, new window.faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks().withFaceDescriptor();
     if (det) onCapture(det.descriptor);
-    else alert("Wajah tidak ditemukan.");
+    else alert("Wajah tidak terdeteksi jelas.");
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl overflow-hidden max-w-sm w-full relative">
-        <video ref={videoRef} autoPlay playsInline muted className="w-full aspect-square object-cover scale-x-[-1]" />
-        <div className="absolute inset-0 border-4 border-dashed m-10 rounded-full border-white/30 pointer-events-none" />
-        <div className="p-6 flex justify-between items-center bg-white">
-          <button onClick={onClose} className="p-3 bg-slate-100 rounded-full text-slate-500"><X size={20}/></button>
-          <button onClick={capture} disabled={!ready} className="w-16 h-16 bg-indigo-600 rounded-full border-4 border-indigo-100 flex items-center justify-center shadow-xl active:scale-90 transition-all">
-             {ready ? <div className="w-12 h-12 rounded-full border-2 border-white/20"/> : <Loader2 className="animate-spin text-white"/>}
-          </button>
-          <div className="w-10" />
+    <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md">
+      <div className="bg-white rounded-[2.5rem] overflow-hidden max-w-sm w-full shadow-2xl relative border-8 border-white">
+        <div className="relative aspect-square bg-slate-900">
+           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+           <div className={`absolute inset-0 border-[6px] border-dashed m-12 rounded-full transition-all duration-500 ${isFaceInFrame ? 'border-green-500 rotate-12 scale-105' : 'border-white/20'}`} />
+           <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 text-white rounded-full"><X size={20}/></button>
+           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 px-4 py-1.5 rounded-full text-white text-[9px] font-black uppercase tracking-widest">
+              {isFaceInFrame ? 'Siap Ambil' : 'Posisikan Wajah'}
+           </div>
+        </div>
+        <div className="p-6 flex justify-center bg-white">
+           <button onClick={capture} disabled={!ready} className={`w-16 h-16 rounded-full border-4 flex items-center justify-center transition-all ${isFaceInFrame ? 'border-indigo-600 bg-indigo-50 shadow-xl' : 'border-slate-100 bg-slate-50'}`}>
+              {ready ? <div className={`w-12 h-12 rounded-full ${isFaceInFrame ? 'bg-indigo-600' : 'bg-slate-200'}`}/> : <Loader2 className="animate-spin text-indigo-600"/>}
+           </button>
         </div>
       </div>
     </div>
@@ -77,7 +90,7 @@ const CameraView = ({ onCapture, onClose }) => {
 };
 
 /* ==========================================
-   3. MAIN APP
+   3. MAIN APPLICATION
 ========================================== */
 export default function App() {
   const [gasUrl, setGasUrl] = useState("");
@@ -85,12 +98,9 @@ export default function App() {
   const [faceDB, setFaceDB] = useState([]);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [camOpen, setCamOpen] = useState(false);
 
-  // Load Awal
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     let u = p.get("api");
@@ -116,40 +126,9 @@ export default function App() {
     setLoading(false);
   };
 
-  // PEMINDAIAN ADMIN (INDEXING)
-  const runIndexer = async () => {
-    const unindexed = files.filter(f => !faceDB.find(db => db.fileId === f.id));
-    if (unindexed.length === 0) return alert("Semua foto sudah terindeks.");
-
-    await initModels();
-    setIsScanning(true);
-    let newDb = [...faceDB];
-    
-    for (let i = 0; i < unindexed.length; i++) {
-      const file = unindexed[i];
-      try {
-        const img = await window.faceapi.fetchImage(getAIFriendlyUrl(file));
-        const dets = await window.faceapi.detectAllFaces(img, new window.faceapi.TinyFaceDetectorOptions({ inputSize: 416 }))
-          .withFaceLandmarks().withFaceDescriptors();
-        
-        if (dets.length > 0) {
-          newDb.push({
-            fileId: file.id,
-            faces: dets.map(d => Array.from(d.descriptor)) // Simpan sebagai array biasa
-          });
-        }
-      } catch (e) { console.log("Skip:", file.name); }
-      setProgress(Math.round(((i + 1) / unindexed.length) * 100));
-    }
-
-    await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: "saveDB", data: newDb }) });
-    setFaceDB(newDb);
-    setIsScanning(false);
-    alert("Sinkronisasi Selesai!");
-  };
-
-  // PENCARIAN INSTAN (VECTOR SEARCH)
+  // Logika Pencarian Vektor Super Cepat
   const searchInDB = (descriptor) => {
+    setIsSearching(true);
     const matcher = new window.faceapi.FaceMatcher(descriptor, 0.6);
     const results = [];
     faceDB.forEach(entry => {
@@ -159,90 +138,107 @@ export default function App() {
       if (isMatch) results.push(entry.fileId);
     });
     setMatches(results);
+    setIsSearching(false);
     setCamOpen(false);
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsSearching(true);
+    try {
+      await initModels();
+      const img = await window.faceapi.bufferToImage(file);
+      const det = await window.faceapi.detectSingleFace(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+      if (det) searchInDB(det.descriptor);
+      else alert("Wajah tidak ditemukan di foto upload.");
+    } catch (e) { alert("Error memproses gambar."); }
+    setIsSearching(false);
   };
 
   const displayed = matches.length > 0 ? files.filter(f => matches.includes(f.id)) : files;
 
-  if (!gasUrl) return <div className="p-20 text-center text-slate-400 font-bold">Gunakan Generator Link.</div>;
+  if (!gasUrl) return <div className="p-20 text-center font-black italic opacity-20">LINK TIDAK VALID.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 font-sans">
-      {camOpen && <CameraView onCapture={searchInDB} onClose={() => setCamOpen(false)} />}
+    <div className="min-h-screen bg-slate-50 font-sans select-none">
+      <CameraModal isOpen={camOpen} onClose={() => setCamOpen(false)} onCapture={searchInDB} />
 
-      <header className="sticky top-0 bg-white/80 backdrop-blur-md p-4 shadow-sm flex justify-between items-center z-50 border-b">
-        <div className="flex items-center gap-2">
-          <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100">
-             <Database size={18} />
+      {/* MODERN NAVBAR */}
+      <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200 p-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                <Database size={18} />
+             </div>
+             <div className="hidden sm:block">
+                <h1 className="text-xs font-black uppercase tracking-tighter text-indigo-900">Vector Gallery</h1>
+                <p className="text-[9px] font-bold text-slate-400">{faceDB.length} Foto Terindeks</p>
+             </div>
           </div>
-          <div>
-            <h1 className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Biometric System</h1>
-            <p className="text-[9px] text-slate-400 font-bold">{faceDB.length} Photos Indexed</p>
-          </div>
-        </div>
 
-        <div className="flex gap-2">
-          <button onClick={() => setCamOpen(true)} className="p-2 bg-indigo-100 text-indigo-600 rounded-full hover:bg-indigo-200 transition-colors">
-            <Camera size={20} />
-          </button>
-          <button onClick={() => setIsAdmin(!isAdmin)} className={`p-2 rounded-full border transition-all ${isAdmin ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white text-slate-400'}`}>
-            <Layers size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+             <button onClick={() => setCamOpen(true)} className="p-2.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-all">
+                <Camera size={20}/>
+             </button>
+             <label className="p-2.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-all cursor-pointer">
+                <ImageIcon size={20}/>
+                <input type="file" className="hidden" onChange={handleFileUpload} accept="image/*" />
+             </label>
+             {matches.length > 0 && (
+                <button onClick={() => setMatches([])} className="p-2.5 bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-all">
+                   <RefreshCw size={18}/>
+                </button>
+             )}
+          </div>
         </div>
       </header>
 
-      {isAdmin && (
-        <div className="bg-indigo-900 text-white p-4 animate-in slide-in-from-top-2">
-           <div className="flex justify-between items-center max-w-7xl mx-auto">
-              <span className="text-xs font-bold opacity-70">Admin Mode: Sinkronisasi database biometrik secara manual.</span>
-              <button onClick={runIndexer} disabled={isScanning} className="bg-white text-indigo-900 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2">
-                {isScanning ? <Loader2 size={12} className="animate-spin"/> : <Cpu size={12}/>} Sinkronisasi AI
-              </button>
-           </div>
-        </div>
+      {/* FEEDBACK STATUS */}
+      {matches.length > 0 && (
+         <div className="max-w-7xl mx-auto px-4 mt-6">
+            <div className="bg-indigo-900 text-white p-4 rounded-3xl flex items-center justify-between shadow-2xl shadow-indigo-200 animate-in slide-in-from-top-4">
+               <div className="flex items-center gap-3 px-2">
+                  <ScanFace className="text-indigo-400" />
+                  <span className="text-xs font-black uppercase tracking-widest">Ditemukan {matches.length} Foto</span>
+               </div>
+               <button onClick={() => setMatches([])} className="bg-white/10 hover:bg-white/20 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
+                  Tampilkan Semua
+               </button>
+            </div>
+         </div>
       )}
 
-      <main className="p-4 max-w-7xl mx-auto">
-        {matches.length > 0 && (
-          <div className="mb-4 flex items-center justify-between bg-green-50 p-3 rounded-2xl border border-green-100">
-             <span className="text-xs font-bold text-green-700">Ditemukan {matches.length} foto.</span>
-             <button onClick={() => setMatches([])} className="text-[10px] font-black text-green-600 uppercase hover:underline">Reset Pencarian</button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+      {/* GRID */}
+      <main className="max-w-7xl mx-auto p-4 md:p-6">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-4">
           {displayed.map(f => (
-            <div key={f.id} onClick={() => window.open(f.full, "_blank")} className={`aspect-square rounded-2xl overflow-hidden border-2 transition-all cursor-pointer group hover:scale-95 ${matches.includes(f.id) ? 'border-indigo-500 ring-4 ring-indigo-50 shadow-xl' : 'border-transparent opacity-90 hover:opacity-100'}`}>
-              <img src={f.thumbnail} className="w-full h-full object-cover transition-transform group-hover:scale-110" loading="lazy" />
+            <div key={f.id} onClick={() => window.open(f.full, "_blank")} className={`group aspect-square rounded-[1.5rem] overflow-hidden border-2 transition-all cursor-pointer hover:scale-95 active:scale-90 ${matches.includes(f.id) ? 'border-indigo-500 ring-4 ring-indigo-50 shadow-2xl' : 'border-transparent opacity-95 hover:opacity-100 shadow-sm'}`}>
+              <img src={f.thumbnail} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-125" loading="lazy" />
+              {matches.includes(f.id) && (
+                <div className="absolute top-2 right-2 bg-indigo-500 text-white p-1 rounded-full shadow-lg border-2 border-white animate-bounce">
+                  <CheckCircle2 size={10} />
+                </div>
+              )}
             </div>
           ))}
         </div>
 
         {displayed.length === 0 && !loading && (
-          <div className="py-32 text-center opacity-20">
-             <User size={64} className="mx-auto mb-4" />
-             <p className="font-black text-xs tracking-[0.3em] uppercase">No Matches Found</p>
+          <div className="py-40 text-center flex flex-col items-center opacity-10">
+             <User size={80} className="mb-4" />
+             <p className="font-black text-xs uppercase tracking-[0.5em]">No Data Found</p>
           </div>
         )}
       </main>
 
-      {isScanning && (
-        <div className="fixed bottom-0 inset-x-0 bg-white border-t p-6 z-[110] shadow-2xl animate-in slide-in-from-bottom-5">
-           <div className="max-w-md mx-auto">
-              <div className="flex justify-between items-end mb-2">
-                 <span className="text-[10px] font-black text-indigo-600 uppercase">Scanning Faces...</span>
-                 <span className="text-2xl font-black text-indigo-900">{progress}%</span>
-              </div>
-              <div className="h-3 bg-indigo-50 rounded-full overflow-hidden border border-indigo-100">
-                 <div className="h-full bg-indigo-600 transition-all duration-500" style={{width: `${progress}%`}} />
-              </div>
+      {/* LOADING OVERLAYS */}
+      {(loading || isSearching) && (
+        <div className="fixed inset-0 bg-white/60 backdrop-blur-md flex flex-col items-center justify-center z-[110] animate-in fade-in">
+           <div className="w-16 h-16 bg-white rounded-3xl shadow-xl flex items-center justify-center mb-6">
+              <Loader2 className="animate-spin text-indigo-600" size={32}/>
            </div>
-        </div>
-      )}
-
-      {loading && (
-        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center">
-           <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+           <span className="text-[10px] font-black text-indigo-900 uppercase tracking-[0.4em]">{isSearching ? 'Membandingkan Vektor...' : 'Menghubungkan Drive...'}</span>
         </div>
       )}
     </div>
