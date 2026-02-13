@@ -22,13 +22,20 @@
 
         <!-- BOX 1: KONFIGURASI API -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
-            <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <i class="fa-solid fa-gear"></i> Konfigurasi API
-            </h2>
+            <div class="flex justify-between items-center">
+                <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i> Konfigurasi API
+                </h2>
+                <!-- Diagnostik Button -->
+                <button onclick="checkBackendStatus()" class="text-[9px] bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded-full font-bold border border-slate-700 transition-all">
+                    CEK KONEKSI BACKEND
+                </button>
+            </div>
             <div class="grid gap-4">
                 <div>
                     <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Google Apps Script URL</label>
                     <input id="scriptUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-indigo-300" placeholder="https://script.google.com/.../exec">
+                    <p class="text-[8px] text-slate-600 mt-1 ml-2 font-mono italic">*Gunakan URL yang di-deploy sebagai Web App (Anyone)</p>
                 </div>
                 <div>
                     <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">ID Folder Drive (Root Scan)</label>
@@ -95,12 +102,32 @@
                 ? "http://localhost:5173" 
                 : currentOrigin;
             
-            const saved = localStorage.getItem('biometric_admin_script');
-            if(saved) {
-                document.getElementById('scriptUrl').value = saved;
+            const savedScript = localStorage.getItem('biometric_admin_script');
+            if(savedScript) {
+                document.getElementById('scriptUrl').value = savedScript;
                 updateLink();
             }
         };
+
+        // Fungsi diagnosa koneksi
+        async function checkBackendStatus() {
+            const url = document.getElementById('scriptUrl').value.trim();
+            if(!url) return alert("Masukkan URL Script terlebih dahulu.");
+            
+            try {
+                const testUrl = `${url}?action=checkStatus&t=${Date.now()}`;
+                const res = await fetch(testUrl);
+                const data = await res.json();
+                
+                if (data.status === "Online") {
+                    alert("✅ BACKEND CONNECTED!\nDB Exists: " + data.dbExists + "\nFile ID: " + data.fileId);
+                } else {
+                    alert("⚠️ Respon diterima tapi data tidak sesuai.");
+                }
+            } catch (e) {
+                alert("❌ GAGAL TERHUBUNG!\nKemungkinan: URL Salah, Deployment belum versi terbaru, atau izin akses belum diatur ke 'Anyone'.\n\nDetail: " + e.message);
+            }
+        }
 
         function updateLink() {
             const baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, "");
@@ -166,7 +193,10 @@
                         if(dets.length > 0) {
                             faceDB.push({ fileId: f.id, faces: dets.map(d => Array.from(d.descriptor)) });
                         }
-                    } catch(e) { console.warn("Skip file", f.name); }
+                    } catch(e) { 
+                        console.warn("Skip file", f.name);
+                        document.getElementById('logText').innerText = `Gagal load: ${f.name} (Lewati)`;
+                    }
                     
                     const p = Math.round(((i+1)/files.length)*100);
                     document.getElementById('progressBar').style.width = p + '%';
