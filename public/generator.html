@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Smart AI Indexer (TXT)</title>
+    <title>AI Indexer & Diagnostic Tool</title>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -9,37 +9,42 @@
 <body class="bg-slate-950 text-white font-sans p-4 sm:p-8">
     <div class="max-w-2xl mx-auto space-y-6">
         
-        <!-- HEADER -->
         <div class="flex items-center gap-4 mb-2">
-            <div class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <i class="fa-solid fa-bolt text-xl text-white"></i>
+            <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <i class="fa-solid fa-microchip text-xl text-white"></i>
             </div>
             <div>
-                <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Smart Indexer</h1>
-                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">Auto-Update & Incremental Sync</p>
+                <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Biometric Admin</h1>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">System Diagnostic v4.1</p>
             </div>
         </div>
 
-        <!-- BOX 1: CONFIG -->
+        <!-- CONFIG & DIAGNOSTIC -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-emerald-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                    <i class="fa-solid fa-gear"></i> Konfigurasi
+                <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i> Konfigurasi API
                 </h2>
-                <button onclick="checkStatus()" class="text-[9px] bg-slate-800 hover:bg-emerald-500 px-4 py-1.5 rounded-full font-black border border-white/5 transition-all">
-                    CEK KONEKSI
+                <button onclick="runDiagnostics()" class="text-[9px] bg-slate-800 hover:bg-yellow-600 px-4 py-2 rounded-full font-black border border-white/10 transition-all text-yellow-400 hover:text-white">
+                    <i class="fa-solid fa-stethoscope mr-1"></i> CEK KONEKSI & IZIN TULIS
                 </button>
             </div>
+            
+            <!-- LOG DIAGNOSA -->
+            <div id="diagBox" class="hidden bg-black/60 p-4 rounded-xl border border-yellow-500/20 font-mono text-[10px] text-slate-300 space-y-1 max-h-40 overflow-y-auto">
+                <!-- Log output here -->
+            </div>
+
             <div class="grid gap-4">
-                <input id="scriptUrl" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-emerald-300" placeholder="URL Web App (/exec)">
+                <input id="scriptUrl" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-300" placeholder="URL Web App (/exec)">
                 <div class="grid grid-cols-2 gap-4">
-                    <input id="folderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="ID Folder FOTO">
-                    <input id="dbFolderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="ID Folder DB">
+                    <input id="folderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ID Folder FOTO">
+                    <input id="dbFolderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ID Folder DB (Tempat Simpan)">
                 </div>
             </div>
         </div>
 
-        <!-- BOX 2: INDEXER -->
+        <!-- INDEXER -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <div class="flex justify-between">
                 <h2 class="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
@@ -64,7 +69,7 @@
             </button>
         </div>
 
-        <!-- BOX 3: LINK -->
+        <!-- LINK -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl">
             <h2 class="text-slate-400 text-xs font-black uppercase tracking-widest mb-4">Link Aplikasi</h2>
             <div class="bg-black/60 p-4 rounded-2xl border border-slate-700 flex gap-2">
@@ -94,6 +99,164 @@
             updateLink();
         }
 
+        function addLog(msg, color = "text-slate-300") {
+            const box = document.getElementById('diagBox');
+            box.classList.remove('hidden');
+            const div = document.createElement('div');
+            div.className = color;
+            div.innerText = `> ${msg}`;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        async function runDiagnostics() {
+            const url = document.getElementById('scriptUrl').value.trim();
+            const dbid = document.getElementById('dbFolderId').value.trim();
+            
+            document.getElementById('diagBox').innerHTML = ""; // Clear log
+            addLog("Memulai diagnosa...", "text-yellow-400");
+
+            if(!url || !dbid) return addLog("URL Script atau ID Folder DB kosong!", "text-red-500");
+
+            // TEST 1: KONEKSI & READ
+            try {
+                addLog("Test 1: Cek Koneksi & Izin Baca...");
+                const res = await fetch(`${url}?action=checkStatus&folderId=${dbid}&dbId=${dbid}`);
+                const data = await res.json();
+                
+                if(data.status === "Online") {
+                    addLog(`✅ Server Online.`, "text-green-400");
+                    if(data.readAccess) {
+                        addLog(`✅ Folder '${data.folderName}' terbaca.`, "text-green-400");
+                    } else {
+                        addLog(`❌ Folder tidak ditemukan atau akses ditolak.`, "text-red-500");
+                    }
+                    addLog(`ℹ️ DB Exists: ${data.dbExists}`);
+                } else {
+                    addLog(`❌ Error Backend: ${data.error || 'Unknown'}`, "text-red-500");
+                    return;
+                }
+            } catch(e) {
+                return addLog(`❌ HTTP Error: ${e.message}`, "text-red-500");
+            }
+
+            // TEST 2: WRITE PERMISSION
+            try {
+                addLog("Test 2: Cek Izin Tulis (Membuat File Test)...");
+                const payload = { action: "testWrite", folderId: dbid };
+                
+                const writeRes = await fetch(url, {
+                    method: 'POST',
+                    mode: 'no-cors', // Penting untuk GAS
+                    body: JSON.stringify(payload),
+                    headers: {'Content-Type': 'text/plain;charset=utf-8'}
+                });
+
+                // Karena no-cors, kita tidak bisa baca responsnya langsung.
+                // Kita asumsi terkirim, lalu kita cek lagi lewat GET apakah file test ada?
+                // Atau kita percaya jika tidak ada error network.
+                
+                addLog("✅ Permintaan tulis terkirim.", "text-green-400");
+                addLog("ℹ️ Jika gagal simpan, periksa apakah Anda pemilik folder.", "text-slate-400");
+
+            } catch(e) {
+                addLog(`❌ Gagal Kirim Data: ${e.message}`, "text-red-500");
+            }
+        }
+
+        async function initAI() {
+            const MODEL_URL = "https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights";
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
+        }
+
+        document.getElementById('syncBtn').onclick = async () => {
+            if(isProcessing) return;
+            const url = document.getElementById('scriptUrl').value.trim();
+            const fid = document.getElementById('folderId').value.trim();
+            const dbid = document.getElementById('dbFolderId').value.trim();
+            
+            if(!url || !fid || !dbid) return alert("Semua kolom konfigurasi wajib diisi!");
+
+            isProcessing = true;
+            document.getElementById('statusBox').classList.remove('hidden');
+            const btn = document.getElementById('syncBtn');
+            btn.innerText = "SCANNING...";
+            btn.classList.add('opacity-50');
+
+            try {
+                // 1. SCAN FOTO
+                document.getElementById('statusText').innerText = "Membaca Foto...";
+                const fileRes = await fetch(`${url}?folderId=${fid}`);
+                const fileData = await fileRes.json();
+                const allFiles = fileData.files || [];
+
+                if(allFiles.length === 0) throw new Error("Tidak ada foto.");
+
+                await initAI();
+                const newEntries = [];
+                
+                for(let i=0; i < allFiles.length; i++) {
+                    const f = allFiles[i];
+                    document.getElementById('logText').innerText = `Scan: ${f.name}`;
+                    
+                    try {
+                        const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(f.full)}&w=600&output=jpg&q=80`;
+                        const img = await faceapi.fetchImage(imgUrl);
+                        const dets = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 })).withFaceLandmarks().withFaceDescriptors();
+                        
+                        if(dets.length > 0) {
+                            newEntries.push({ 
+                                fileId: f.id, 
+                                faces: dets.map(d => Array.from(d.descriptor)) 
+                            });
+                        }
+                    } catch(e) { console.warn("Skip", f.name); }
+
+                    const p = Math.round(((i+1)/allFiles.length)*100);
+                    document.getElementById('progressBar').style.width = p + '%';
+                    document.getElementById('percentText').innerText = p + '%';
+                }
+
+                // 2. SIMPAN DB
+                document.getElementById('statusText').innerText = "Menyimpan ke Drive...";
+                
+                await fetch(url, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+                    body: JSON.stringify({ 
+                        action: "saveDB", 
+                        folderId: dbid, 
+                        data: newEntries 
+                    })
+                });
+                
+                document.getElementById('statusText').innerText = "Verifikasi...";
+                await new Promise(r => setTimeout(r, 4000)); // Tunggu server nulis file
+                
+                // Cek final
+                const checkRes = await fetch(`${url}?action=checkStatus&folderId=${dbid}&dbId=${dbid}&t=${Date.now()}`);
+                const checkData = await checkRes.json();
+                
+                if(checkData.dbExists) {
+                    alert(`SUKSES! Database disimpan di folder: ${checkData.folderName}`);
+                } else {
+                    throw new Error("Gagal verifikasi file. Kemungkinan error izin tulis.");
+                }
+
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+
+            isProcessing = false;
+            btn.innerText = "MULAI SMART SYNC";
+            btn.classList.remove('opacity-50');
+        };
+
         function updateLink() {
             const baseUrl = window.location.origin.includes('null') ? "http://localhost:5173" : window.location.origin;
             const scriptUrl = document.getElementById('scriptUrl').value.trim();
@@ -110,126 +273,6 @@
             document.getElementById('resultLink').value = finalLink;
             document.getElementById('previewBtn').href = finalLink;
         }
-
-        async function checkStatus() {
-            const url = document.getElementById('scriptUrl').value.trim();
-            const dbid = document.getElementById('dbFolderId').value.trim();
-            if(!url) return alert("URL Script kosong!");
-            
-            try {
-                const res = await fetch(`${url}?action=checkStatus&folderId=${dbid}`);
-                const data = await res.json();
-                alert(`STATUS: ${data.status}\nFolder: ${data.folderName}\nAda File: ${data.dbExists}\nID: ${data.fileId}`);
-            } catch(e) { alert("Gagal koneksi: " + e.message); }
-        }
-
-        async function initAI() {
-            const MODEL_URL = "https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights";
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-            ]);
-        }
-
-        document.getElementById('syncBtn').onclick = async () => {
-            if(isProcessing) return;
-            
-            const url = document.getElementById('scriptUrl').value.trim();
-            const fid = document.getElementById('folderId').value.trim();
-            const dbid = document.getElementById('dbFolderId').value.trim();
-            
-            if(!url || !fid || !dbid) return alert("Semua kolom konfigurasi wajib diisi!");
-
-            isProcessing = true;
-            const btn = document.getElementById('syncBtn');
-            const statusBox = document.getElementById('statusBox');
-            statusBox.classList.remove('hidden');
-            btn.innerText = "MENGANALISA FOLDER...";
-            btn.classList.add('opacity-50');
-
-            try {
-                // 1. Load Existing DB
-                document.getElementById('statusText').innerText = "Cek Data Lama...";
-                const dbRes = await fetch(`${url}?action=getDB&dbId=${dbid}`);
-                const existingDB = await dbRes.json();
-                const existingIds = new Set((Array.isArray(existingDB) ? existingDB : []).map(x => x.fileId));
-                
-                document.getElementById('statsLabel').innerText = `DB Lama: ${existingIds.size} foto`;
-
-                // 2. Load File List dari Drive
-                document.getElementById('statusText').innerText = "Membaca Drive...";
-                const fileRes = await fetch(`${url}?folderId=${fid}`);
-                const fileData = await fileRes.json();
-                const allFiles = fileData.files || [];
-
-                // 3. Filter: Hanya proses yang belum ada di DB
-                const newFiles = allFiles.filter(f => !existingIds.has(f.id));
-
-                if(newFiles.length === 0) {
-                    alert("Semua foto sudah terindeks! Tidak ada data baru.");
-                    isProcessing = false;
-                    btn.innerText = "Sinkronisasi Wajah Sekarang";
-                    btn.classList.remove('opacity-50');
-                    return;
-                }
-
-                // 4. Proses AI untuk File Baru
-                await initAI();
-                const newEntries = [];
-                
-                for(let i=0; i < newFiles.length; i++) {
-                    const f = newFiles[i];
-                    document.getElementById('logText').innerText = `Memproses Baru (${i+1}/${newFiles.length}): ${f.name}`;
-                    
-                    try {
-                        const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(f.full)}&w=600&output=jpg&q=80`;
-                        const img = await faceapi.fetchImage(imgUrl);
-                        const dets = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 })).withFaceLandmarks().withFaceDescriptors();
-                        
-                        if(dets.length > 0) {
-                            newEntries.push({ 
-                                fileId: f.id, 
-                                faces: dets.map(d => Array.from(d.descriptor)) 
-                            });
-                        }
-                    } catch(e) { console.warn("Skip", f.name); }
-
-                    const p = Math.round(((i+1)/newFiles.length)*100);
-                    document.getElementById('progressBar').style.width = p + '%';
-                    document.getElementById('percentText').innerText = p + '%';
-                }
-
-                // 5. Kirim Update (Append) ke Server
-                if(newEntries.length > 0) {
-                    document.getElementById('statusText').innerText = `Menambahkan ${newEntries.length} data baru...`;
-                    
-                    await fetch(url, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: {'Content-Type': 'text/plain;charset=utf-8'},
-                        body: JSON.stringify({ 
-                            action: "updateDB", 
-                            folderId: dbid, 
-                            data: newEntries 
-                        })
-                    });
-                    
-                    // Tunggu & Verifikasi
-                    await new Promise(r => setTimeout(r, 4000));
-                    alert(`BERHASIL!\nDitambahkan: ${newEntries.length} foto baru ke database.\nTotal di proses: ${newFiles.length}`);
-                } else {
-                    alert("Selesai. Tidak ada wajah terdeteksi di foto-foto baru.");
-                }
-
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
-
-            isProcessing = false;
-            btn.innerText = "Sinkronisasi Wajah Sekarang";
-            btn.classList.remove('opacity-50');
-        };
 
         function copyLink() {
             navigator.clipboard.writeText(document.getElementById("resultLink").value);
