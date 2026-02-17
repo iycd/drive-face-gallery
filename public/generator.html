@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Indexer & Link Generator PRO</title>
+    <title>Smart AI Indexer (TXT)</title>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -11,182 +11,99 @@
         
         <!-- HEADER -->
         <div class="flex items-center gap-4 mb-2">
-            <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <i class="fa-solid fa-microchip text-xl text-white"></i>
+            <div class="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <i class="fa-solid fa-bolt text-xl text-white"></i>
             </div>
             <div>
-                <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Biometric Admin</h1>
-                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase text-indigo-400">Diagnostic & Indexer</p>
+                <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Smart Indexer</h1>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">Auto-Update & Incremental Sync</p>
             </div>
         </div>
 
-        <!-- BOX 1: KONFIGURASI API -->
+        <!-- BOX 1: CONFIG -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                    <i class="fa-solid fa-gear"></i> Konfigurasi API
+                <h2 class="text-emerald-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i> Konfigurasi
                 </h2>
-                <button onclick="checkBackendStatus()" class="text-[9px] bg-slate-800 hover:bg-indigo-500 px-4 py-1.5 rounded-full font-black border border-white/5 transition-all cursor-pointer">
-                    🔎 CEK KONEKSI & DIAGNOSA
+                <button onclick="checkStatus()" class="text-[9px] bg-slate-800 hover:bg-emerald-500 px-4 py-1.5 rounded-full font-black border border-white/5 transition-all">
+                    CEK KONEKSI
                 </button>
             </div>
             <div class="grid gap-4">
-                <div>
-                    <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">URL Web App Script</label>
-                    <input id="scriptUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-indigo-300" placeholder="https://script.google.com/.../exec">
-                </div>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[9px] font-bold text-emerald-500 uppercase ml-2">ID Folder FOTO</label>
-                        <input id="folderId" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-emerald-900/50 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="Sumber Foto">
-                    </div>
-                    <div>
-                        <label class="text-[9px] font-bold text-pink-500 uppercase ml-2">ID Folder DB</label>
-                        <input id="dbFolderId" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-pink-900/50 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-pink-500 transition-all" placeholder="Penyimpanan JSON">
-                    </div>
+                <input id="scriptUrl" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-emerald-300" placeholder="URL Web App (/exec)">
+                <div class="grid grid-cols-2 gap-4">
+                    <input id="folderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="ID Folder FOTO">
+                    <input id="dbFolderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="ID Folder DB">
                 </div>
             </div>
         </div>
 
         <!-- BOX 2: INDEXER -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
-            <h2 class="text-emerald-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <i class="fa-solid fa-database"></i> Database Indexer
-            </h2>
+            <div class="flex justify-between">
+                <h2 class="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                    <i class="fa-solid fa-database"></i> Proses Sinkronisasi
+                </h2>
+                <span id="statsLabel" class="text-[9px] bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded">Idle</span>
+            </div>
             
-            <div id="statusBox" class="hidden bg-black/40 p-5 rounded-2xl border border-indigo-500/20">
+            <div id="statusBox" class="hidden bg-black/40 p-5 rounded-2xl border border-emerald-500/20">
                 <div class="flex justify-between items-end mb-2">
-                    <span id="statusText" class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Menunggu...</span>
+                    <span id="statusText" class="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Menunggu...</span>
                     <span id="percentText" class="text-xl font-black italic text-white">0%</span>
                 </div>
                 <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden shadow-inner border border-white/5">
-                    <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
+                    <div id="progressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
                 </div>
                 <p id="logText" class="text-[9px] font-mono text-slate-400 mt-3 truncate bg-black/20 p-2 rounded-lg"></p>
             </div>
 
-            <button id="syncBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                <i class="fa-solid fa-rotate"></i> Sinkronisasi Wajah Sekarang
+            <button id="syncBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 p-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate"></i> MULAI SMART SYNC
             </button>
         </div>
 
-        <!-- BOX 3: GENERATOR -->
-        <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
-            <h2 class="text-purple-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <i class="fa-solid fa-link"></i> Link Galeri (Secure)
-            </h2>
-            <div>
-                <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Alamat Galeri</label>
-                <input id="baseUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-purple-500 transition-all" placeholder="https://app-anda.vercel.app">
+        <!-- BOX 3: LINK -->
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl">
+            <h2 class="text-slate-400 text-xs font-black uppercase tracking-widest mb-4">Link Aplikasi</h2>
+            <div class="bg-black/60 p-4 rounded-2xl border border-slate-700 flex gap-2">
+                <input id="resultLink" type="text" readonly class="flex-1 bg-transparent text-[10px] font-mono text-slate-400 p-2 outline-none" placeholder="...">
+                <button onclick="copyLink()" class="bg-slate-700 hover:bg-white hover:text-black px-4 py-2 rounded-xl text-[10px] font-bold transition-all">SALIN</button>
             </div>
-            <div class="bg-black/60 p-4 rounded-2xl border border-slate-700">
-                <div class="flex gap-2">
-                    <input id="resultLink" type="text" readonly class="flex-1 bg-transparent text-[10px] font-mono text-slate-400 p-2 outline-none break-all" placeholder="Generate link...">
-                    <button onclick="copyLink()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap">SALIN</button>
-                </div>
-            </div>
-            <a id="previewBtn" href="#" target="_blank" class="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest shadow-lg active:scale-95">
-                Buka Galeri <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+            <a id="previewBtn" href="#" target="_blank" class="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest shadow-lg active:scale-95 mt-2">
+                BUKA GALERI <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
             </a>
         </div>
     </div>
 
     <script>
-        let isSyncing = false;
+        let isProcessing = false;
 
         window.onload = function() {
-            const currentOrigin = window.location.origin;
-            document.getElementById('baseUrl').value = (currentOrigin.includes('null') || currentOrigin.startsWith('file')) ? "http://localhost:5173" : currentOrigin;
-            
-            if(localStorage.getItem('biometric_script')) document.getElementById('scriptUrl').value = localStorage.getItem('biometric_script');
-            if(localStorage.getItem('biometric_foto_id')) document.getElementById('folderId').value = localStorage.getItem('biometric_foto_id');
-            if(localStorage.getItem('biometric_db_id')) document.getElementById('dbFolderId').value = localStorage.getItem('biometric_db_id');
-            
+            if(localStorage.getItem('smart_script')) document.getElementById('scriptUrl').value = localStorage.getItem('smart_script');
+            if(localStorage.getItem('smart_fid')) document.getElementById('folderId').value = localStorage.getItem('smart_fid');
+            if(localStorage.getItem('smart_dbid')) document.getElementById('dbFolderId').value = localStorage.getItem('smart_dbid');
             updateLink();
         };
 
-        async function checkBackendStatus() {
-            const urlInput = document.getElementById('scriptUrl');
-            let url = urlInput.value.trim();
-            const fid = document.getElementById('folderId').value.trim() || 'root';
-            const dbid = document.getElementById('dbFolderId').value.trim() || 'root';
-            
-            if(!url) return alert("Masukkan URL Script terlebih dahulu!");
-
-            // Auto-fix jika user salah paste link edit
-            if (url.includes("/edit")) {
-                url = url.replace(/\/edit.*/, "/exec");
-                urlInput.value = url;
-            }
-
-            if (!url.endsWith("/exec")) {
-                return alert("URL Salah! URL Google Apps Script harus berakhiran '/exec'.\nContoh: .../s/AKfy.../exec");
-            }
-            
-            const btn = document.querySelector('button[onclick="checkBackendStatus()"]');
-            const originalText = btn.innerText;
-            btn.innerText = "MENGHUBUNGKAN...";
-
-            try {
-                // Tambahkan folderId dan dbId agar backend bisa cek akses ke folder tersebut
-                const testUrl = `${url}?action=checkStatus&folderId=${fid}&dbId=${dbid}&t=${Date.now()}`;
-                console.log("Testing:", testUrl);
-
-                const res = await fetch(testUrl);
-                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-
-                const data = await res.json();
-                
-                let report = "";
-                if(data.status === "Online") {
-                    report += "✅ KONEKSI SUKSES!\n\n";
-                    
-                    report += "[📂 FOLDER FOTO]\n";
-                    if(data.photoFolder && data.photoFolder.valid) {
-                        report += `Nama: ${data.photoFolder.name}\n`;
-                        report += `Status: ${data.photoFolder.access}\n`;
-                    } else {
-                        report += `❌ Gagal: ${data.photoFolder ? data.photoFolder.msg : 'ID Folder Salah'}\n`;
-                    }
-
-                    report += "\n[💾 FOLDER DATABASE]\n";
-                    if(data.dbFolder && data.dbFolder.valid) {
-                        report += `Nama: ${data.dbFolder.name}\n`;
-                        report += `Status: ${data.dbFolder.access}\n`;
-                    } else {
-                        report += `❌ Gagal: ${data.dbFolder ? data.dbFolder.msg : 'ID Folder Salah'}\n`;
-                    }
-                } else if (data.error) {
-                    report = `⚠️ TERHUBUNG TAPI ADA ERROR:\n${data.error}`;
-                } else {
-                    report = "⚠️ Respon server tidak dikenali. Pastikan Anda sudah update Code.gs dan Deploy New Version.";
-                }
-                
-                alert(report);
-
-            } catch (e) { 
-                console.error(e);
-                alert("❌ KONEKSI GAGAL!\n\nMasalah yang mungkin terjadi:\n1. Anda belum 'Deploy New Version' (PENTING!).\n2. Akses Deploy belum diset ke 'Anyone'.\n3. URL salah (Harus /exec).\n\nDetail Error: " + e.message); 
-            } finally {
-                btn.innerText = originalText;
-            }
+        function saveConfig() {
+            localStorage.setItem('smart_script', document.getElementById('scriptUrl').value.trim());
+            localStorage.setItem('smart_fid', document.getElementById('folderId').value.trim());
+            localStorage.setItem('smart_dbid', document.getElementById('dbFolderId').value.trim());
+            updateLink();
         }
 
         function updateLink() {
-            const baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, "");
+            const baseUrl = window.location.origin.includes('null') ? "http://localhost:5173" : window.location.origin;
             const scriptUrl = document.getElementById('scriptUrl').value.trim();
-            const folderId = document.getElementById('folderId').value.trim();     
-            const dbFolderId = document.getElementById('dbFolderId').value.trim(); 
+            const fid = document.getElementById('folderId').value.trim() || 'root';
+            const dbid = document.getElementById('dbFolderId').value.trim() || fid;
 
-            if(!baseUrl || !scriptUrl) return;
-
-            localStorage.setItem('biometric_script', scriptUrl);
-            localStorage.setItem('biometric_foto_id', folderId);
-            localStorage.setItem('biometric_db_id', dbFolderId);
+            if(!scriptUrl) return;
             
             const separator = scriptUrl.includes('?') ? '&' : '?';
-            const rawApi = `${scriptUrl}${separator}folderId=${folderId || 'root'}&dbId=${dbFolderId || folderId || 'root'}`;
+            const rawApi = `${scriptUrl}${separator}folderId=${fid}&dbId=${dbid}`;
             const encrypted = btoa(rawApi);
             const finalLink = `${baseUrl}/?api=${encrypted}`;
             
@@ -194,9 +111,16 @@
             document.getElementById('previewBtn').href = finalLink;
         }
 
-        function copyLink() {
-            navigator.clipboard.writeText(document.getElementById("resultLink").value);
-            alert("Link disalin!");
+        async function checkStatus() {
+            const url = document.getElementById('scriptUrl').value.trim();
+            const dbid = document.getElementById('dbFolderId').value.trim();
+            if(!url) return alert("URL Script kosong!");
+            
+            try {
+                const res = await fetch(`${url}?action=checkStatus&folderId=${dbid}`);
+                const data = await res.json();
+                alert(`STATUS: ${data.status}\nFolder: ${data.folderName}\nAda File: ${data.dbExists}\nID: ${data.fileId}`);
+            } catch(e) { alert("Gagal koneksi: " + e.message); }
         }
 
         async function initAI() {
@@ -209,66 +133,108 @@
         }
 
         document.getElementById('syncBtn').onclick = async () => {
-            if(isSyncing) return;
+            if(isProcessing) return;
+            
             const url = document.getElementById('scriptUrl').value.trim();
-            const fid = document.getElementById('folderId').value.trim();   
+            const fid = document.getElementById('folderId').value.trim();
             const dbid = document.getElementById('dbFolderId').value.trim();
             
-            if(!url || !fid || !dbid) return alert("Lengkapi URL dan Kedua Folder ID!");
+            if(!url || !fid || !dbid) return alert("Semua kolom konfigurasi wajib diisi!");
 
-            isSyncing = true;
-            document.getElementById('statusBox').classList.remove('hidden');
-            document.getElementById('syncBtn').innerText = "MENYIAPKAN...";
-            document.getElementById('syncBtn').classList.add('opacity-50');
+            isProcessing = true;
+            const btn = document.getElementById('syncBtn');
+            const statusBox = document.getElementById('statusBox');
+            statusBox.classList.remove('hidden');
+            btn.innerText = "MENGANALISA FOLDER...";
+            btn.classList.add('opacity-50');
 
             try {
-                await initAI();
+                // 1. Load Existing DB
+                document.getElementById('statusText').innerText = "Cek Data Lama...";
+                const dbRes = await fetch(`${url}?action=getDB&dbId=${dbid}`);
+                const existingDB = await dbRes.json();
+                const existingIds = new Set((Array.isArray(existingDB) ? existingDB : []).map(x => x.fileId));
                 
+                document.getElementById('statsLabel').innerText = `DB Lama: ${existingIds.size} foto`;
+
+                // 2. Load File List dari Drive
                 document.getElementById('statusText').innerText = "Membaca Drive...";
-                const res = await fetch(`${url}?folderId=${fid}`);
-                const data = await res.json();
-                const files = data.files || [];
+                const fileRes = await fetch(`${url}?folderId=${fid}`);
+                const fileData = await fileRes.json();
+                const allFiles = fileData.files || [];
 
-                if(files.length === 0) throw new Error("Folder Foto kosong.");
+                // 3. Filter: Hanya proses yang belum ada di DB
+                const newFiles = allFiles.filter(f => !existingIds.has(f.id));
 
-                const faceDB = [];
-                for(let i=0; i < files.length; i++) {
-                    const f = files[i];
-                    document.getElementById('logText').innerText = `Scan: ${f.name}`;
+                if(newFiles.length === 0) {
+                    alert("Semua foto sudah terindeks! Tidak ada data baru.");
+                    isProcessing = false;
+                    btn.innerText = "Sinkronisasi Wajah Sekarang";
+                    btn.classList.remove('opacity-50');
+                    return;
+                }
+
+                // 4. Proses AI untuk File Baru
+                await initAI();
+                const newEntries = [];
+                
+                for(let i=0; i < newFiles.length; i++) {
+                    const f = newFiles[i];
+                    document.getElementById('logText').innerText = `Memproses Baru (${i+1}/${newFiles.length}): ${f.name}`;
+                    
                     try {
                         const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(f.full)}&w=600&output=jpg&q=80`;
                         const img = await faceapi.fetchImage(imgUrl);
-                        const dets = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 }))
-                                              .withFaceLandmarks().withFaceDescriptors();
+                        const dets = await faceapi.detectAllFaces(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 })).withFaceLandmarks().withFaceDescriptors();
+                        
                         if(dets.length > 0) {
-                            faceDB.push({ fileId: f.id, faces: dets.map(d => Array.from(d.descriptor)) });
+                            newEntries.push({ 
+                                fileId: f.id, 
+                                faces: dets.map(d => Array.from(d.descriptor)) 
+                            });
                         }
-                    } catch(e) { /* skip */ }
-                    
-                    const p = Math.round(((i+1)/files.length)*100);
+                    } catch(e) { console.warn("Skip", f.name); }
+
+                    const p = Math.round(((i+1)/newFiles.length)*100);
                     document.getElementById('progressBar').style.width = p + '%';
                     document.getElementById('percentText').innerText = p + '%';
                 }
 
-                document.getElementById('statusText').innerText = "Menyimpan DB...";
-                const payload = { action: "saveDB", data: faceDB, folderId: dbid };
-                
-                await fetch(url, { 
-                    method: 'POST', 
-                    body: JSON.stringify(payload),
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-                });
+                // 5. Kirim Update (Append) ke Server
+                if(newEntries.length > 0) {
+                    document.getElementById('statusText').innerText = `Menambahkan ${newEntries.length} data baru...`;
+                    
+                    await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+                        body: JSON.stringify({ 
+                            action: "updateDB", 
+                            folderId: dbid, 
+                            data: newEntries 
+                        })
+                    });
+                    
+                    // Tunggu & Verifikasi
+                    await new Promise(r => setTimeout(r, 4000));
+                    alert(`BERHASIL!\nDitambahkan: ${newEntries.length} foto baru ke database.\nTotal di proses: ${newFiles.length}`);
+                } else {
+                    alert("Selesai. Tidak ada wajah terdeteksi di foto-foto baru.");
+                }
 
-                alert("SUKSES!\nDatabase vektor disimpan.");
-                document.getElementById('statusText').innerText = "SELESAI!";
-            } catch(e) { 
-                alert("GAGAL: " + e.message);
+            } catch(e) {
+                alert("Error: " + e.message);
             }
-            
-            isSyncing = false;
-            document.getElementById('syncBtn').innerText = "Sinkronisasi Wajah Sekarang";
-            document.getElementById('syncBtn').classList.remove('opacity-50');
+
+            isProcessing = false;
+            btn.innerText = "Sinkronisasi Wajah Sekarang";
+            btn.classList.remove('opacity-50');
         };
+
+        function copyLink() {
+            navigator.clipboard.writeText(document.getElementById("resultLink").value);
+            alert("Link disalin!");
+        }
     </script>
 </body>
 </html>
