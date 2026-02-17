@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Search, Loader2, RefreshCw, Database, Camera, X, 
-  CheckCircle2, User, Upload, Image as ImageIcon, ScanFace, AlertCircle
+  CheckCircle2, User, Upload, Image as ImageIcon, AlertCircle
 } from "lucide-react";
 
 /* ==========================================
-   AI LOADER (CDN CEPAT)
+   AI LOADER
 ========================================== */
 const loadFaceApi = () =>
   new Promise((resolve) => {
@@ -14,7 +14,6 @@ const loadFaceApi = () =>
     s.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
     s.crossOrigin = "anonymous";
     s.onload = resolve;
-    s.onerror = () => console.error("Gagal load script face-api");
     document.head.appendChild(s);
   });
 
@@ -22,7 +21,6 @@ let modelsLoaded = false;
 async function initModels() {
   if (modelsLoaded) return;
   await loadFaceApi();
-  // Menggunakan CDN GitHub yang lebih stabil daripada justadudewhohacks
   const URL = "https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights";
   await Promise.all([
     window.faceapi.nets.tinyFaceDetector.loadFromUri(URL),
@@ -42,11 +40,9 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
 
   useEffect(() => {
     if (!isOpen) return;
-    initModels().then(() => setReady(true)).catch(() => alert("Gagal memuat AI. Cek internet."));
-    
+    initModels().then(() => setReady(true));
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-      .then(s => { if (videoRef.current) videoRef.current.srcObject = s; })
-      .catch(e => alert("Kamera error: " + e.message));
+      .then(s => { if (videoRef.current) videoRef.current.srcObject = s; });
 
     const interval = setInterval(async () => {
       if (videoRef.current && ready && window.faceapi) {
@@ -70,7 +66,7 @@ const CameraModal = ({ isOpen, onClose, onCapture }) => {
       const det = await window.faceapi.detectSingleFace(videoRef.current, new window.faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks().withFaceDescriptor();
       if (det) onCapture(det.descriptor);
-      else alert("Wajah tidak terdeteksi. Pastikan cahaya cukup.");
+      else alert("Wajah tidak terdeteksi.");
     } catch(e) { alert("Gagal capture: " + e.message); }
   };
 
@@ -104,7 +100,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [camOpen, setCamOpen] = useState(false);
-  const [dbStatus, setDbStatus] = useState("unknown"); // 'ok' | 'empty' | 'error'
+  const [dbStatus, setDbStatus] = useState("unknown"); 
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -122,58 +118,43 @@ export default function App() {
     setLoading(true);
     setDbStatus("loading");
     try {
-      // Fetch paralel: List File & Database Vektor
       const [fRes, dbRes] = await Promise.all([
         fetch(url).then(r => r.json()).catch(() => ({ files: [] })), 
         fetch(`${url}&action=getDB`).then(r => r.json()).catch(() => []) 
       ]);
 
-      // Validasi List File
       if (fRes && Array.isArray(fRes.files)) {
         setFiles(fRes.files);
       } else {
         setFiles([]);
-        console.error("Format Files salah:", fRes);
       }
       
-      // Validasi Database Vektor (PENTING AGAR TIDAK CRASH)
       if (Array.isArray(dbRes) && dbRes.length > 0) {
         setFaceDB(dbRes);
         setDbStatus("ok");
       } else {
-        setFaceDB([]); // Pastikan tetap array kosong, jangan null/error object
-        if (dbRes && dbRes.error) {
-           console.error("DB Error:", dbRes.error);
-           setDbStatus("error");
-        } else {
-           setDbStatus("empty");
-        }
+        setFaceDB([]);
+        setDbStatus("empty");
       }
     } catch (e) { 
-      console.error("Init Critical Error:", e);
       setDbStatus("error");
     }
     setLoading(false);
   };
 
   const processSearch = (descriptor) => {
-    if (!faceDB || faceDB.length === 0) {
-        return alert("Database kosong atau belum dimuat. Lakukan sinkronisasi di Admin.");
-    }
+    if (!faceDB || faceDB.length === 0) return alert("Database kosong.");
     
     setSearching(true);
     setCamOpen(false);
     
     try {
-      const matcher = new window.faceapi.FaceMatcher(descriptor, 0.55); // Threshold sedikit lebih ketat
+      const matcher = new window.faceapi.FaceMatcher(descriptor, 0.55);
       const results = [];
       
       faceDB.forEach(entry => {
-        // Validasi struktur entry DB
         if (!entry.faces || !Array.isArray(entry.faces)) return;
-
         const isMatch = entry.faces.some(vec => {
-          // KONVERSI WAJIB KE FLOAT32
           const vector = new Float32Array(vec); 
           const match = matcher.findBestMatch(vector);
           return match.label !== "unknown";
@@ -184,7 +165,6 @@ export default function App() {
       setMatches(results);
       if(results.length === 0) alert("Wajah tidak ditemukan.");
     } catch(e) {
-      console.error(e);
       alert("Error pencocokan: " + e.message);
     }
     setSearching(false);
@@ -199,7 +179,7 @@ export default function App() {
       const img = await window.faceapi.bufferToImage(file);
       const det = await window.faceapi.detectSingleFace(img, new window.faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
       if (det) processSearch(det.descriptor);
-      else alert("Wajah tidak terdeteksi pada foto.");
+      else alert("Wajah tidak terdeteksi.");
     } catch (e) { alert("Error memproses gambar."); }
     setSearching(false);
   };
