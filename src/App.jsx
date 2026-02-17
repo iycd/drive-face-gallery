@@ -14,6 +14,7 @@ const loadFaceApi = () =>
     s.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
     s.crossOrigin = "anonymous";
     s.onload = resolve;
+    s.onerror = () => console.error("Gagal load script face-api");
     document.head.appendChild(s);
   });
 
@@ -119,28 +120,46 @@ export default function App() {
 
   const initApp = async (url) => {
     setLoading(true);
+    setDbStatus("loading");
     try {
+      // Fetch paralel: List File & Database Vektor
       const [fRes, dbRes] = await Promise.all([
-        fetch(url).then(r => r.json()),
-        fetch(`${url}&action=getDB`).then(r => r.json()) // Tambah &action karena URL sudah ada query
+        fetch(url).then(r => r.json()).catch(() => ({ files: [] })), 
+        fetch(`${url}&action=getDB`).then(r => r.json()).catch(() => []) 
       ]);
-      setFiles(fRes.files || []);
+
+      // Validasi List File
+      if (fRes && Array.isArray(fRes.files)) {
+        setFiles(fRes.files);
+      } else {
+        setFiles([]);
+        console.error("Format Files salah:", fRes);
+      }
       
+      // Validasi Database Vektor (PENTING AGAR TIDAK CRASH)
       if (Array.isArray(dbRes) && dbRes.length > 0) {
         setFaceDB(dbRes);
         setDbStatus("ok");
       } else {
-        setDbStatus("empty");
+        setFaceDB([]); // Pastikan tetap array kosong, jangan null/error object
+        if (dbRes && dbRes.error) {
+           console.error("DB Error:", dbRes.error);
+           setDbStatus("error");
+        } else {
+           setDbStatus("empty");
+        }
       }
     } catch (e) { 
-      console.error(e);
+      console.error("Init Critical Error:", e);
       setDbStatus("error");
     }
     setLoading(false);
   };
 
   const processSearch = (descriptor) => {
-    if (!faceDB.length) return alert("Database kosong. Harap sinkronisasi ulang di Generator.");
+    if (!faceDB || faceDB.length === 0) {
+        return alert("Database kosong atau belum dimuat. Lakukan sinkronisasi di Admin.");
+    }
     
     setSearching(true);
     setCamOpen(false);
@@ -150,8 +169,11 @@ export default function App() {
       const results = [];
       
       faceDB.forEach(entry => {
-        // KONVERSI WAJIB KE FLOAT32
+        // Validasi struktur entry DB
+        if (!entry.faces || !Array.isArray(entry.faces)) return;
+
         const isMatch = entry.faces.some(vec => {
+          // KONVERSI WAJIB KE FLOAT32
           const vector = new Float32Array(vec); 
           const match = matcher.findBestMatch(vector);
           return match.label !== "unknown";
@@ -162,6 +184,7 @@ export default function App() {
       setMatches(results);
       if(results.length === 0) alert("Wajah tidak ditemukan.");
     } catch(e) {
+      console.error(e);
       alert("Error pencocokan: " + e.message);
     }
     setSearching(false);
@@ -191,13 +214,13 @@ export default function App() {
 
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b p-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${dbStatus === 'ok' ? 'bg-indigo-600' : 'bg-red-500'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${dbStatus === 'ok' ? 'bg-indigo-600' : (dbStatus === 'error' ? 'bg-red-500' : 'bg-slate-400')}`}>
              <Database size={18} />
           </div>
           <div className="hidden sm:block">
             <h1 className="text-xs font-black uppercase text-indigo-900">Biometric Gallery</h1>
             <p className="text-[9px] font-bold text-slate-400">
-              {dbStatus === 'ok' ? `${faceDB.length} Indexed` : 'DB Not Found'}
+              {dbStatus === 'ok' ? `${faceDB.length} Indexed` : (dbStatus === 'loading' ? 'Loading...' : 'DB Not Found')}
             </p>
           </div>
         </div>
@@ -211,9 +234,16 @@ export default function App() {
       </header>
 
       {dbStatus === 'empty' && (
-        <div className="mx-4 mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700">
-           <AlertTriangle size={24}/>
+        <div className="mx-4 mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700 animate-in fade-in">
+           <AlertCircle size={24}/>
            <div className="text-xs font-bold">Database Belum Ada. Silakan lakukan sinkronisasi di Admin Panel.</div>
+        </div>
+      )}
+
+      {dbStatus === 'error' && (
+        <div className="mx-4 mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700 animate-in fade-in">
+           <AlertCircle size={24}/>
+           <div className="text-xs font-bold">Gagal memuat Database. Cek koneksi atau izin script.</div>
         </div>
       )}
 
