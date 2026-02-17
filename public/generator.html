@@ -16,54 +16,38 @@
             </div>
             <div>
                 <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Biometric Admin</h1>
-                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">System Diagnostic v4.2</p>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase text-indigo-400">Diagnostic v5.5</p>
             </div>
         </div>
 
-        <div class="bg-yellow-900/30 border border-yellow-500/50 p-4 rounded-xl flex gap-3 items-start">
-            <i class="fa-solid fa-triangle-exclamation text-yellow-500 mt-1"></i>
-            <div>
-                <h3 class="text-xs font-bold text-yellow-500 uppercase">Penting: Izin Akses Script</h3>
-                <p class="text-[10px] text-slate-300 mt-1 leading-relaxed">
-                    Saat Deploy Google Script, pada bagian <b>"Who has access"</b> WAJIB pilih <b>"Anyone" (Siapa Saja)</b>.<br>
-                    Jika pilih "Anyone with Google Account", sinkronisasi akan gagal karena terhalang login.
-                </p>
-            </div>
-        </div>
-
-        <!-- CONFIG & DIAGNOSTIC -->
+        <!-- BOX 1: KONFIGURASI API -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <div class="flex justify-between items-center">
                 <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
                     <i class="fa-solid fa-gear"></i> Konfigurasi API
                 </h2>
                 <button onclick="runDiagnostics()" class="text-[9px] bg-slate-800 hover:bg-yellow-600 px-4 py-2 rounded-full font-black border border-white/10 transition-all text-yellow-400 hover:text-white">
-                    <i class="fa-solid fa-stethoscope mr-1"></i> CEK KONEKSI & IZIN TULIS
+                    <i class="fa-solid fa-stethoscope mr-1"></i> CEK KONEKSI & DIAGNOSA
                 </button>
             </div>
             
             <!-- LOG DIAGNOSA -->
-            <div id="diagBox" class="hidden bg-black/60 p-4 rounded-xl border border-yellow-500/20 font-mono text-[10px] text-slate-300 space-y-1 max-h-40 overflow-y-auto">
-                <!-- Log output here -->
-            </div>
+            <div id="diagBox" class="hidden bg-black/60 p-4 rounded-xl border border-yellow-500/20 font-mono text-[10px] text-slate-300 space-y-1 max-h-40 overflow-y-auto"></div>
 
             <div class="grid gap-4">
                 <input id="scriptUrl" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-300" placeholder="URL Web App (/exec)">
                 <div class="grid grid-cols-2 gap-4">
                     <input id="folderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ID Folder FOTO">
-                    <input id="dbFolderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ID Folder DB (Tempat Simpan)">
+                    <input id="dbFolderId" type="text" oninput="saveConfig()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ID Folder DB">
                 </div>
             </div>
         </div>
 
         <!-- INDEXER -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
-            <div class="flex justify-between">
-                <h2 class="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                    <i class="fa-solid fa-database"></i> Proses Sinkronisasi
-                </h2>
-                <span id="statsLabel" class="text-[9px] bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded">Idle</span>
-            </div>
+            <h2 class="text-emerald-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                <i class="fa-solid fa-database"></i> Database Indexer
+            </h2>
             
             <div id="statusBox" class="hidden bg-black/40 p-5 rounded-2xl border border-emerald-500/20">
                 <div class="flex justify-between items-end mb-2">
@@ -125,57 +109,45 @@
             const url = document.getElementById('scriptUrl').value.trim();
             const dbid = document.getElementById('dbFolderId').value.trim();
             
-            document.getElementById('diagBox').innerHTML = ""; // Clear log
+            document.getElementById('diagBox').innerHTML = ""; 
             addLog("Memulai diagnosa...", "text-yellow-400");
 
-            if(!url || !dbid) return addLog("URL Script atau ID Folder DB kosong!", "text-red-500");
+            if(!url || !dbid) return addLog("Lengkapi data dulu!", "text-red-500");
 
-            // TEST 1: KONEKSI & READ
             try {
-                addLog("Test 1: Cek Koneksi & Izin Baca...");
+                addLog("1. Cek Koneksi & Hak Akses...");
                 const res = await fetch(`${url}?action=checkStatus&folderId=${dbid}&dbId=${dbid}`);
-                
-                // Cek jika redirect ke login page (HTML response)
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.includes("text/html")) {
-                     addLog("❌ ERROR: Menerima HTML (Halaman Login).", "text-red-500");
-                     addLog("❗ SOLUSI: Deploy ulang script, set akses ke 'Anyone'.", "text-yellow-400");
-                     return;
-                }
-
                 const data = await res.json();
                 
                 if(data.status === "Online") {
-                    addLog(`✅ Server Online.`, "text-green-400");
-                    if(data.readAccess) {
-                        addLog(`✅ Folder '${data.folderName}' terbaca.`, "text-green-400");
+                    addLog(`✅ Server: ONLINE`, "text-green-400");
+                    addLog(`👤 User Script: ${data.scriptUser}`); // INFO PENTING
+                    addLog(`📁 Folder: ${data.folderName}`);
+                    
+                    if(data.folderAccess !== "OK") {
+                         addLog(`❌ Gagal Akses Folder: ${data.error}`, "text-red-500");
+                         if(data.hint) addLog(`💡 ${data.hint}`, "text-yellow-400");
                     } else {
-                        addLog(`❌ Folder tidak ditemukan atau akses ditolak.`, "text-red-500");
+                         addLog(`✅ Folder Terbaca. Izin: ${data.permissionLevel || 'Unknown'}`);
+                         addLog(`📄 DB Exists: ${data.dbExists}`);
                     }
-                    addLog(`ℹ️ DB Exists: ${data.dbExists}`);
                 } else {
-                    addLog(`❌ Error Backend: ${data.error || 'Unknown'}`, "text-red-500");
-                    return;
+                    addLog(`❌ Backend Error: ${data.error || 'Unknown'}`, "text-red-500");
                 }
             } catch(e) {
                 return addLog(`❌ HTTP Error: ${e.message}`, "text-red-500");
             }
 
-            // TEST 2: WRITE PERMISSION
             try {
-                addLog("Test 2: Cek Izin Tulis (Membuat File Test)...");
+                addLog("2. Tes Membuat File...");
                 const payload = { action: "testWrite", folderId: dbid };
-                
-                const writeRes = await fetch(url, {
+                await fetch(url, {
                     method: 'POST',
                     mode: 'no-cors', 
                     body: JSON.stringify(payload),
                     headers: {'Content-Type': 'text/plain;charset=utf-8'}
                 });
-                
-                addLog("✅ Request tulis terkirim (no-cors).", "text-green-400");
-                addLog("ℹ️ Cek folder Drive Anda, cari 'test_permission_check.txt'.", "text-slate-400");
-
+                addLog("✅ Request tulis terkirim.", "text-green-400");
             } catch(e) {
                 addLog(`❌ Gagal Kirim Data: ${e.message}`, "text-red-500");
             }
@@ -205,7 +177,6 @@
             btn.classList.add('opacity-50');
 
             try {
-                // 1. SCAN FOTO
                 document.getElementById('statusText').innerText = "Membaca Foto...";
                 const fileRes = await fetch(`${url}?folderId=${fid}`);
                 const fileData = await fileRes.json();
@@ -238,7 +209,6 @@
                     document.getElementById('percentText').innerText = p + '%';
                 }
 
-                // 2. SIMPAN DB
                 document.getElementById('statusText').innerText = "Menyimpan ke Drive...";
                 
                 await fetch(url, {
@@ -253,9 +223,8 @@
                 });
                 
                 document.getElementById('statusText').innerText = "Verifikasi...";
-                await new Promise(r => setTimeout(r, 4000)); // Tunggu server nulis file
+                await new Promise(r => setTimeout(r, 4000)); 
                 
-                // Cek final
                 const checkRes = await fetch(`${url}?action=checkStatus&folderId=${dbid}&dbId=${dbid}&t=${Date.now()}`);
                 const checkData = await checkRes.json();
                 
