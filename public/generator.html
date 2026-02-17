@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AI Indexer & Diagnostic Tool</title>
+    <title>AI Indexer & Link Generator PRO</title>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -9,13 +9,25 @@
 <body class="bg-slate-950 text-white font-sans p-4 sm:p-8">
     <div class="max-w-2xl mx-auto space-y-6">
         
+        <!-- HEADER -->
         <div class="flex items-center gap-4 mb-2">
             <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
                 <i class="fa-solid fa-microchip text-xl text-white"></i>
             </div>
             <div>
                 <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Biometric Admin</h1>
-                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">System Diagnostic v4.1</p>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase">System Diagnostic v4.2</p>
+            </div>
+        </div>
+
+        <div class="bg-yellow-900/30 border border-yellow-500/50 p-4 rounded-xl flex gap-3 items-start">
+            <i class="fa-solid fa-triangle-exclamation text-yellow-500 mt-1"></i>
+            <div>
+                <h3 class="text-xs font-bold text-yellow-500 uppercase">Penting: Izin Akses Script</h3>
+                <p class="text-[10px] text-slate-300 mt-1 leading-relaxed">
+                    Saat Deploy Google Script, pada bagian <b>"Who has access"</b> WAJIB pilih <b>"Anyone" (Siapa Saja)</b>.<br>
+                    Jika pilih "Anyone with Google Account", sinkronisasi akan gagal karena terhalang login.
+                </p>
             </div>
         </div>
 
@@ -122,6 +134,15 @@
             try {
                 addLog("Test 1: Cek Koneksi & Izin Baca...");
                 const res = await fetch(`${url}?action=checkStatus&folderId=${dbid}&dbId=${dbid}`);
+                
+                // Cek jika redirect ke login page (HTML response)
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("text/html")) {
+                     addLog("❌ ERROR: Menerima HTML (Halaman Login).", "text-red-500");
+                     addLog("❗ SOLUSI: Deploy ulang script, set akses ke 'Anyone'.", "text-yellow-400");
+                     return;
+                }
+
                 const data = await res.json();
                 
                 if(data.status === "Online") {
@@ -147,17 +168,13 @@
                 
                 const writeRes = await fetch(url, {
                     method: 'POST',
-                    mode: 'no-cors', // Penting untuk GAS
+                    mode: 'no-cors', 
                     body: JSON.stringify(payload),
                     headers: {'Content-Type': 'text/plain;charset=utf-8'}
                 });
-
-                // Karena no-cors, kita tidak bisa baca responsnya langsung.
-                // Kita asumsi terkirim, lalu kita cek lagi lewat GET apakah file test ada?
-                // Atau kita percaya jika tidak ada error network.
                 
-                addLog("✅ Permintaan tulis terkirim.", "text-green-400");
-                addLog("ℹ️ Jika gagal simpan, periksa apakah Anda pemilik folder.", "text-slate-400");
+                addLog("✅ Request tulis terkirim (no-cors).", "text-green-400");
+                addLog("ℹ️ Cek folder Drive Anda, cari 'test_permission_check.txt'.", "text-slate-400");
 
             } catch(e) {
                 addLog(`❌ Gagal Kirim Data: ${e.message}`, "text-red-500");
@@ -229,7 +246,7 @@
                     mode: 'no-cors',
                     headers: {'Content-Type': 'text/plain;charset=utf-8'},
                     body: JSON.stringify({ 
-                        action: "saveDB", 
+                        action: "updateDB", 
                         folderId: dbid, 
                         data: newEntries 
                     })
