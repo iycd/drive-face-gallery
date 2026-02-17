@@ -107,44 +107,70 @@
         };
 
         async function checkBackendStatus() {
-            const url = document.getElementById('scriptUrl').value.trim();
-            const fid = document.getElementById('folderId').value.trim();
-            const dbid = document.getElementById('dbFolderId').value.trim();
+            const urlInput = document.getElementById('scriptUrl');
+            let url = urlInput.value.trim();
+            const fid = document.getElementById('folderId').value.trim() || 'root';
+            const dbid = document.getElementById('dbFolderId').value.trim() || 'root';
             
-            if(!url) return alert("Masukkan URL Script!");
+            if(!url) return alert("Masukkan URL Script terlebih dahulu!");
+
+            // Auto-fix jika user salah paste link edit
+            if (url.includes("/edit")) {
+                url = url.replace(/\/edit.*/, "/exec");
+                urlInput.value = url;
+            }
+
+            if (!url.endsWith("/exec")) {
+                return alert("URL Salah! URL Google Apps Script harus berakhiran '/exec'.\nContoh: .../s/AKfy.../exec");
+            }
             
+            const btn = document.querySelector('button[onclick="checkBackendStatus()"]');
+            const originalText = btn.innerText;
+            btn.innerText = "MENGHUBUNGKAN...";
+
             try {
-                // Kirim ID Folder Foto dan DB untuk dicek
+                // Tambahkan folderId dan dbId agar backend bisa cek akses ke folder tersebut
                 const testUrl = `${url}?action=checkStatus&folderId=${fid}&dbId=${dbid}&t=${Date.now()}`;
+                console.log("Testing:", testUrl);
+
                 const res = await fetch(testUrl);
+                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
                 const data = await res.json();
                 
                 let report = "";
                 if(data.status === "Online") {
-                    report += "✅ KONEKSI: BERHASIL\n\n";
+                    report += "✅ KONEKSI SUKSES!\n\n";
                     
                     report += "[📂 FOLDER FOTO]\n";
-                    if(data.photoFolder.valid) {
-                        report += "Nama: " + data.photoFolder.name + "\n";
-                        report += "Status: " + data.photoFolder.access + "\n";
+                    if(data.photoFolder && data.photoFolder.valid) {
+                        report += `Nama: ${data.photoFolder.name}\n`;
+                        report += `Status: ${data.photoFolder.access}\n`;
                     } else {
-                        report += "❌ Gagal: " + data.photoFolder.msg + "\n";
+                        report += `❌ Gagal: ${data.photoFolder ? data.photoFolder.msg : 'ID Folder Salah'}\n`;
                     }
 
                     report += "\n[💾 FOLDER DATABASE]\n";
-                    if(data.dbFolder.valid) {
-                        report += "Nama: " + data.dbFolder.name + "\n";
-                        report += "Status: " + data.dbFolder.access + "\n";
+                    if(data.dbFolder && data.dbFolder.valid) {
+                        report += `Nama: ${data.dbFolder.name}\n`;
+                        report += `Status: ${data.dbFolder.access}\n`;
                     } else {
-                        report += "❌ Gagal: " + data.dbFolder.msg + "\n";
+                        report += `❌ Gagal: ${data.dbFolder ? data.dbFolder.msg : 'ID Folder Salah'}\n`;
                     }
+                } else if (data.error) {
+                    report = `⚠️ TERHUBUNG TAPI ADA ERROR:\n${data.error}`;
                 } else {
-                    report = "⚠️ Respon server tidak valid.";
+                    report = "⚠️ Respon server tidak dikenali. Pastikan Anda sudah update Code.gs dan Deploy New Version.";
                 }
                 
                 alert(report);
 
-            } catch (e) { alert("Koneksi Gagal. Cek URL dan Deployment."); }
+            } catch (e) { 
+                console.error(e);
+                alert("❌ KONEKSI GAGAL!\n\nMasalah yang mungkin terjadi:\n1. Anda belum 'Deploy New Version' (PENTING!).\n2. Akses Deploy belum diset ke 'Anyone'.\n3. URL salah (Harus /exec).\n\nDetail Error: " + e.message); 
+            } finally {
+                btn.innerText = originalText;
+            }
         }
 
         function updateLink() {
