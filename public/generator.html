@@ -16,7 +16,7 @@
             </div>
             <div>
                 <h1 class="text-2xl font-black uppercase tracking-tighter italic text-white">Biometric Admin</h1>
-                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase text-indigo-400">Indexer & Link Generator</p>
+                <p class="text-slate-500 text-[10px] font-bold tracking-widest uppercase text-indigo-400">Secure Separation Mode</p>
             </div>
         </div>
 
@@ -24,15 +24,30 @@
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <div class="flex justify-between items-center">
                 <h2 class="text-indigo-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                    <i class="fa-solid fa-gear"></i> Konfigurasi API
+                    <i class="fa-solid fa-gear"></i> Konfigurasi Folder
                 </h2>
                 <button onclick="checkBackendStatus()" class="text-[9px] bg-slate-800 hover:bg-indigo-500 px-4 py-1.5 rounded-full font-black border border-white/5 transition-all">
-                    CEK KONEKSI & DB
+                    CEK KONEKSI
                 </button>
             </div>
             <div class="grid gap-4">
-                <input id="scriptUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-indigo-300" placeholder="URL Web App (Ending /exec)">
-                <input id="folderId" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all" placeholder="ID Folder Google Drive">
+                <div>
+                    <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">URL Web App Script</label>
+                    <input id="scriptUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-indigo-300" placeholder="https://script.google.com/.../exec">
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[9px] font-bold text-emerald-500 uppercase ml-2">ID Folder FOTO (Sumber)</label>
+                        <input id="folderId" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-emerald-900/50 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition-all" placeholder="Folder Foto Asli">
+                        <p class="text-[8px] text-slate-600 mt-1 ml-2">Folder ini hanya akan DIBACA (Read-Only).</p>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-pink-500 uppercase ml-2">ID Folder DB (Penyimpanan)</label>
+                        <input id="dbFolderId" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-pink-900/50 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-pink-500 transition-all" placeholder="Folder Simpan JSON">
+                        <p class="text-[8px] text-slate-600 mt-1 ml-2">File JSON vektor akan disimpan di sini.</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -47,33 +62,37 @@
                     <span id="statusText" class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Menunggu...</span>
                     <span id="percentText" class="text-xl font-black italic text-white">0%</span>
                 </div>
-                <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden shadow-inner border border-white/5">
-                    <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+                <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden shadow-inner border border-white/5">
+                    <div id="progressBar" class="bg-indigo-500 h-full w-0 transition-all duration-300 shadow-[0_0_15px_rgba(99,102,241,0.5)]"></div>
                 </div>
                 <p id="logText" class="text-[9px] font-mono text-slate-400 mt-3 truncate bg-black/20 p-2 rounded-lg"></p>
             </div>
 
             <button id="syncBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
-                <i class="fa-solid fa-rotate"></i> Sinkronisasi Wajah Sekarang
+                <i class="fa-solid fa-rotate"></i> Scan Foto & Simpan ke DB Folder
             </button>
         </div>
 
         <!-- BOX 3: GENERATOR -->
         <div class="bg-slate-900 border border-slate-800 p-6 rounded-[2rem] shadow-2xl space-y-4">
             <h2 class="text-purple-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                <i class="fa-solid fa-link"></i> Link Galeri
+                <i class="fa-solid fa-link"></i> Link Galeri (Secure)
             </h2>
+            <div>
+                <label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Alamat Galeri (Vercel)</label>
+                <input id="baseUrl" type="text" oninput="updateLink()" class="w-full bg-slate-800 border border-slate-700 p-4 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-purple-500 transition-all" placeholder="https://app-anda.vercel.app">
+            </div>
             <div class="bg-black/60 p-4 rounded-2xl border border-slate-700">
-                <input id="resultLink" type="text" readonly class="w-full bg-transparent text-[10px] font-mono text-slate-400 p-2 outline-none mb-3" placeholder="Generated link...">
                 <div class="flex gap-2">
-                    <button onclick="copyLink()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl text-xs font-bold transition-all">
-                        <i class="fa-regular fa-copy mr-2"></i> SALIN LINK
+                    <input id="resultLink" type="text" readonly class="flex-1 bg-transparent text-[10px] font-mono text-slate-400 p-2 outline-none break-all" placeholder="Isi kedua ID Folder...">
+                    <button onclick="copyLink()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl text-[10px] font-bold transition-all whitespace-nowrap">
+                        SALIN
                     </button>
-                    <a id="previewBtn" href="#" target="_blank" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-black py-3 rounded-xl text-center text-xs uppercase shadow-lg">
-                        BUKA GALERI <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
-                    </a>
                 </div>
             </div>
+            <a id="previewBtn" href="#" target="_blank" class="block w-full text-center bg-purple-600 hover:bg-purple-500 text-white font-black py-4 rounded-2xl transition-all text-xs uppercase tracking-widest shadow-lg active:scale-95">
+                Buka Galeri <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i>
+            </a>
         </div>
     </div>
 
@@ -81,42 +100,57 @@
         let isSyncing = false;
 
         window.onload = function() {
-            const saved = localStorage.getItem('biometric_admin_script');
-            if(saved) document.getElementById('scriptUrl').value = saved;
+            const currentOrigin = window.location.origin;
+            document.getElementById('baseUrl').value = (currentOrigin.includes('null') || currentOrigin.startsWith('file')) ? "http://localhost:5173" : currentOrigin;
             
-            // Set Base URL otomatis (Localhost atau Vercel)
-            const currentOrigin = window.location.origin.includes('null') ? "http://localhost:5173" : window.location.origin;
-            // Update link
-            updateLink(currentOrigin);
+            // Restore data
+            if(localStorage.getItem('biometric_script')) document.getElementById('scriptUrl').value = localStorage.getItem('biometric_script');
+            if(localStorage.getItem('biometric_foto_id')) document.getElementById('folderId').value = localStorage.getItem('biometric_foto_id');
+            if(localStorage.getItem('biometric_db_id')) document.getElementById('dbFolderId').value = localStorage.getItem('biometric_db_id');
+            
+            updateLink();
         };
 
         async function checkBackendStatus() {
             const url = document.getElementById('scriptUrl').value.trim();
-            const fid = document.getElementById('folderId').value.trim();
+            const dbId = document.getElementById('dbFolderId').value.trim(); // Cek status di folder DB
             if(!url) return alert("Masukkan URL Script!");
             
             try {
-                // Tambahkan folderId ke checkStatus agar backend tau folder mana yg dicek
-                const testUrl = `${url}?action=checkStatus&folderId=${fid}&t=${Date.now()}`;
+                // Kirim folderId sebagai folder DB untuk pengecekan file
+                const testUrl = `${url}?action=checkStatus&folderId=${dbId || 'root'}&t=${Date.now()}`;
                 const res = await fetch(testUrl);
                 const data = await res.json();
                 
-                alert(`STATUS: ${data.status}\nFolder: ${data.folderId}\nDB Ada: ${data.dbExists}\nFile ID: ${data.fileId}`);
-            } catch (e) {
-                alert("Koneksi Gagal. Cek URL dan Deployment.");
-            }
+                let msg = data.status === "Online" ? "✅ KONEKSI OKE" : "⚠️ ERROR";
+                msg += `\nLokasi DB: ${data.folderName || 'Unknown'}`;
+                msg += `\nDB Ada: ${data.dbExists}`;
+                alert(msg);
+            } catch (e) { alert("Koneksi Gagal."); }
         }
 
-        function updateLink(origin) {
-            const baseUrl = origin || (window.location.origin.includes('null') ? "http://localhost:5173" : window.location.origin);
+        function updateLink() {
+            const baseUrl = document.getElementById('baseUrl').value.trim().replace(/\/$/, "");
             const scriptUrl = document.getElementById('scriptUrl').value.trim();
-            const folderId = document.getElementById('folderId').value.trim() || 'root';
+            const folderId = document.getElementById('folderId').value.trim();     // Foto Source
+            const dbFolderId = document.getElementById('dbFolderId').value.trim(); // DB Dest
 
-            if(!scriptUrl) return;
-            localStorage.setItem('biometric_admin_script', scriptUrl);
+            if(!baseUrl || !scriptUrl) return;
+
+            // Save settings
+            localStorage.setItem('biometric_script', scriptUrl);
+            localStorage.setItem('biometric_foto_id', folderId);
+            localStorage.setItem('biometric_db_id', dbFolderId);
+            
+            // Format URL Parameter:
+            // folderId = Folder Foto (Untuk loading gambar)
+            // dbId = Folder Database (Untuk load JSON)
+            // Jika dbId kosong, fallback ke folderId
             
             const separator = scriptUrl.includes('?') ? '&' : '?';
-            const rawApi = `${scriptUrl}${separator}folderId=${folderId}`;
+            // Kita kirim parameter dbId agar App.jsx tau harus ambil JSON dimana
+            const rawApi = `${scriptUrl}${separator}folderId=${folderId || 'root'}&dbId=${dbFolderId || folderId || 'root'}`;
+            
             const encrypted = btoa(rawApi);
             const finalLink = `${baseUrl}/?api=${encrypted}`;
             
@@ -141,8 +175,10 @@
         document.getElementById('syncBtn').onclick = async () => {
             if(isSyncing) return;
             const url = document.getElementById('scriptUrl').value.trim();
-            const fid = document.getElementById('folderId').value.trim();
-            if(!url || !fid) return alert("URL dan Folder ID wajib!");
+            const fid = document.getElementById('folderId').value.trim();   // SCAN FOTO DISINI
+            const dbid = document.getElementById('dbFolderId').value.trim();// SIMPAN DB DISINI
+            
+            if(!url || !fid || !dbid) return alert("Mohon lengkapi URL Script dan KEDUA ID Folder!");
 
             isSyncing = true;
             document.getElementById('statusBox').classList.remove('hidden');
@@ -151,17 +187,19 @@
 
             try {
                 await initAI();
-                document.getElementById('statusText').innerText = "Membaca Drive...";
+                
+                // 1. SCAN FOTO DI FOLDER FOTO (fid)
+                document.getElementById('statusText').innerText = "Scan Folder Foto...";
                 const res = await fetch(`${url}?folderId=${fid}`);
                 const data = await res.json();
                 const files = data.files || [];
 
-                if(files.length === 0) throw new Error("Folder kosong.");
+                if(files.length === 0) throw new Error("Folder Foto kosong.");
 
                 const faceDB = [];
                 for(let i=0; i < files.length; i++) {
                     const f = files[i];
-                    document.getElementById('logText').innerText = `Scan: ${f.name}`;
+                    document.getElementById('logText').innerText = `Proses: ${f.name}`;
                     try {
                         const imgUrl = `https://wsrv.nl/?url=${encodeURIComponent(f.full)}&w=600&output=jpg&q=80`;
                         const img = await faceapi.fetchImage(imgUrl);
@@ -170,17 +208,20 @@
                         if(dets.length > 0) {
                             faceDB.push({ fileId: f.id, faces: dets.map(d => Array.from(d.descriptor)) });
                         }
-                    } catch(e) { console.warn("Skip", f.name); }
+                    } catch(e) { /* skip */ }
                     
                     const p = Math.round(((i+1)/files.length)*100);
                     document.getElementById('progressBar').style.width = p + '%';
                     document.getElementById('percentText').innerText = p + '%';
                 }
 
-                document.getElementById('statusText').innerText = "SIMPAN KE FOLDER...";
-                
-                // UPDATE: Kirim folderId di payload agar disimpan di folder yang sama
-                const payload = { action: "saveDB", data: faceDB, folderId: fid };
+                // 2. SIMPAN KE FOLDER DB (dbid)
+                document.getElementById('statusText').innerText = "Simpan ke Folder DB...";
+                const payload = { 
+                    action: "saveDB", 
+                    data: faceDB, 
+                    folderId: dbid // <-- Kunci: Simpan di folder khusus DB
+                };
                 
                 await fetch(url, { 
                     method: 'POST', 
@@ -188,8 +229,19 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' }
                 });
 
-                alert("SUKSES! Database disimpan di folder " + fid);
-                document.getElementById('statusText').innerText = "SELESAI!";
+                document.getElementById('statusText').innerText = "VERIFIKASI...";
+                // Verifikasi keberadaan file di folder DB
+                const checkUrl = `${url}?action=checkStatus&folderId=${dbid}&t=${Date.now()}`;
+                const checkRes = await fetch(checkUrl);
+                const checkData = await checkRes.json();
+
+                if(checkData.dbExists) {
+                    alert("SUKSES!\nDatabase vektor tersimpan aman di folder terpisah.");
+                    document.getElementById('statusText').innerText = "SELESAI!";
+                } else {
+                    throw new Error("Gagal verifikasi file di folder tujuan.");
+                }
+
             } catch(e) { 
                 alert("GAGAL: " + e.message);
             }
